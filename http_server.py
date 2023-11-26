@@ -12,6 +12,13 @@ from Uri import Uri
 
 
 class EventData:
+    """
+    Represents data associated with an event.
+        fd: File descriptor (socket) associated with the event.
+        length: Length of data.
+        cursor: Position of the cursor in the data.
+        buffer: Byte array to store incoming or outgoing data.
+    """
     def __init__(self):
         self.fd = 0
         self.length = 0
@@ -20,30 +27,39 @@ class EventData:
 
 
 class HttpServer:
-    K_MAX_BUFFER_SIZE = 4096
-    K_BACKLOG_SIZE = 1000
-    K_MAX_CONNECTIONS = 10000
-    K_MAX_EVENTS = 10000
-    K_THREAD_POOL_SIZE = 5
+    """
+    Represents the HTTP server with methods to
+    start and stop the server, handle requests, and manage connections.
+
+    """
+    K_MAX_BUFFER_SIZE = 4096   # Maximum buffer size for reading/writing data.
+    K_BACKLOG_SIZE = 1000   # Maximum number of pending connections in the socket's listen queue.
+    K_MAX_CONNECTIONS = 10000   # Maximum number of connections allowed.
+    K_MAX_EVENTS = 10000  # Maximum number of events to retrieve during a call to select.
+    K_THREAD_POOL_SIZE = 5   # K_THREAD_POOL_SIZE: Number of worker threads to handle events.
 
     def __init__(self, host, port):
         self.host = host
         self.port = port
         self.sock_fd = None
         self.running = False
-        self.running_lock = threading.Lock()
-        self.worker_epoll_fd = []  # Initialize as an empty list
+        self.running_lock = threading.Lock()  # A lock to ensure thread safety when starting and stopping the server.
+        self.worker_epoll_fd = []  #
         self.rng = random.Random(time.time())
         self.sleep_times = (10, 100)
         self.listener_thread = None
-        self.worker_threads = []  # Initialize as an empty list
+        self.worker_threads = []  #
         self.worker_events = [None] * self.K_THREAD_POOL_SIZE
         self.request_handlers = {}
         self.create_socket()
         self.persistent_connections = set()  # Set to keep track of persistent connections
 
     def start(self):
-        """Starts the HTTP server."""
+        """
+        Starts the HTTP server.
+
+        Binds the socket, starts the listener thread, and initializes worker threads to handle events.
+        """
         with self.running_lock:
             if self.running:
                 raise RuntimeError("Server is already running.")
@@ -73,6 +89,10 @@ class HttpServer:
             worker_thread.start()
 
     def stop(self):
+        """
+        Stops the server, joining the listener and worker threads, and closes the socket.
+
+        """
         with self.running_lock:
             if not self.running:
                 raise RuntimeError("Server is not running.")
@@ -94,6 +114,10 @@ class HttpServer:
         self.request_handlers[uri][method] = callback
 
     def create_socket(self):
+        """
+        Creates a TCP socket and sets it to non-blocking mode.
+
+        """
         try:
             self.sock_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock_fd.setblocking(False)  # Set the socket to non-blocking
@@ -101,6 +125,10 @@ class HttpServer:
             raise RuntimeError(f"Error creating socket: {e}")
 
     def set_up_epoll(self):
+        """
+         Initializes a list of selectors.DefaultSelector objects for worker
+
+        """
         for i in range(self.K_THREAD_POOL_SIZE):
             epoll_fd = selectors.DefaultSelector()
             self.worker_epoll_fd.append(epoll_fd)
@@ -113,7 +141,14 @@ class HttpServer:
         self.persistent_connections.discard(client_fd)
 
     def listen(self):
-        """Listens for incoming connections and handles them."""
+        """
+        Listens for incoming connections and handles them.
+
+        Accepts a connection, sets it to non-blocking mode,
+        and marks it as persistent or non-persistent based on the "Connection" header.
+
+        Registers the connection with the appropriate worker thread for further handling.
+        """
         while self.running:
             try:
                 client_fd, client_address = self.sock_fd.accept()
@@ -153,6 +188,16 @@ class HttpServer:
                     time.sleep(self.rng.uniform(*self.sleep_times))
 
     def process_events(self, worker_id):
+        """
+        Each worker thread handles events using selectors.DefaultSelector.
+
+        Retrieves and processes events (read/write) using the select method.
+
+        Handles read and write events by calling corresponding methods.
+
+        Checks for socket errors and closes connections if necessary.
+
+        """
         epoll_fd = self.worker_epoll_fd[worker_id]
 
         while self.running:
@@ -292,6 +337,10 @@ class HttpServer:
         return valid_users.get(username) == password
 
     def control_epoll_event(self, epoll_fd, events, fd, op=selectors.EVENT_READ, data=None):
+        """
+        Registers, modifies, or unregisters events for a file descriptor in the selector.
+        
+        """
         key = epoll_fd.get_key(fd)
         if key:
             if op == selectors.EVENT_READ or op == selectors.EVENT_WRITE:

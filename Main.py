@@ -23,14 +23,14 @@ def ensure_enough_resource(resource, soft_limit, hard_limit):
 
 
 def say_hello(request):
-    response = HttpResponse(HttpStatusCode.Ok)
+    response = HttpResponse(HttpStatusCode.OK)
     response.set_header("Content-Type", "text/plain")
     response.set_content("Hello, world\n")
     return response
 
 
 def send_html(request):
-    response = HttpResponse(HttpStatusCode.Ok)
+    response = HttpResponse(HttpStatusCode.OK)
     content = "<!doctype html>\n"
     content += "<html>\n<body>\n\n"
     content += "<h1>Hello, world in an Html page</h1>\n"
