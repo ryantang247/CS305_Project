@@ -1,5 +1,6 @@
 import socket
 import base64
+import os
 
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
@@ -9,6 +10,33 @@ server_socket.bind((HOST, PORT))
 server_socket.listen(1)# Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
 
+
+def get_file_list(directory_path):
+    try:
+        # Get the list of files and directories in the specified path
+        entries = os.listdir(directory_path)
+
+        # Filter out directories, leaving only files
+        files = [entry for entry in entries if os.path.isfile(os.path.join(directory_path, entry))]
+
+        return files
+    except OSError as e:
+        # Handle any potential errors, such as permission issues or non-existent directories
+        print(f"Error while getting file list: {e}")
+        return []
+
+def generate_html(file_list):
+    html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
+    html_content += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n"
+    html_content += "<title>File List</title>\n</head>\n<body>\n"
+    html_content += "<h1>File List</h1>\n<ul>\n"
+
+    for file_name in file_list:
+        html_content += f"    <li>{file_name}</li>\n"
+
+    html_content += "</ul>\n</body>\n</html>"
+
+    return html_content
 
 def handle_client_request(client_socket):
     # Receive data from the client
@@ -24,56 +52,33 @@ def handle_client_request(client_socket):
 
     # Implement logic based on the HTTP method
     if method == "GET":
-        try:
-            with open(url[1:], 'rb') as file:
-                file_content = file.read()
-                content_length = len(file_content)
-                content_type = "text/plain"  # Adjust content type based on the file
+        if url == "/":
+            directory_path = r"C:\Users\Asus\Desktop\Computer Networks\CS305_Project\CS305_Project"  # Using a raw string
+            files = get_file_list(directory_path)
 
-                # Check for Authorization header
-                auth_header = headers.get("Authorization")
-                if auth_header and auth_header.startswith("Basic "):
-                    # Extract and verify credentials
-                    credentials_base64 = auth_header.split(" ")[1]
-                    credentials = base64.b64decode(credentials_base64).decode('utf-8')
+            # Render the HTML template with the file data
+            html_content = generate_html(files)
 
-                    # Replace with your authentication logic
-                    expected_credentials = "client1:123"  # Placeholder for expected credentials
+            # Send the HTML content as the response
+            headers = {
+                "Content-Length": str(len(html_content)),
+                "Content-Type": "text/html",
+                "Connection": "close"
+            }
+            response_status_line = "HTTP/1.1 200 OK\r\n"
+            response_header = ""
+            for header, value in headers.items():
+                response_header += f"{header}: {value}\r\n"
+            response_header += "\r\n"
 
-                    if credentials == expected_credentials:
-                        headers = {
-                            "Content-Length": str(content_length),
-                            "Content-Type": content_type,
-                            "Connection": "close"
-                        }
-                        response_status_line = "HTTP/1.1 200 OK\r\n"
-                        response_header = ""
-                        for header, value in headers.items():
-                            response_header += f"{header}: {value}\r\n"
-                        response_header += "\r\n"
-
-                        # Send the response status line, headers, and file content
-                        client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-                        client_socket.sendall(file_content)
-                    else:
-                        # Unauthorized - incorrect credentials
-                        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-                        client_socket.sendall(error_response.encode('utf-8'))
-                else:
-                    # Authorization header not provided
-                    error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
-                    client_socket.sendall(error_response.encode('utf-8'))
-        except FileNotFoundError:
-            # Handle file not found error
-            error_response = "HTTP/1.1 404 Not Found\r\n\r\nFile Not Found"
+            # Send the response status line, headers, and HTML content
+            client_socket.sendall((response_status_line + response_header).encode('utf-8'))
+            client_socket.sendall(html_content.encode('utf-8'))
+        elif url.startswith("/files"):
+            handle_file_request(client_socket, url)
+        else:
+            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
             client_socket.sendall(error_response.encode('utf-8'))
-        except Exception as e:
-                error_message = f"An error occurred: {str(e)}"
-                error_response = f"HTTP/1.1 500 Internal Server Error\r\n\r\n{error_message}"
-
-                client_socket.sendall(error_response.encode('utf-8'))
-
-
 
     elif method == "HEAD":
 
@@ -286,3 +291,5 @@ while True:
     client_socket, client_address = server_socket.accept()
     handle_client_request(client_socket)
     client_socket.close()
+
+
