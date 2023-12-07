@@ -82,9 +82,10 @@ def handle_client_request(client_socket):
         # Similar to GET but without the response body
 
         try:
-
+            print(url)
+            print("get here",open(url, 'rb'))
             with open(url[1:], 'rb') as file:
-
+                print("get here2")
                 file_content = file.read()
 
                 content_length = len(file_content)
