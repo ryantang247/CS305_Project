@@ -339,7 +339,7 @@ class HttpServer:
     def control_epoll_event(self, epoll_fd, events, fd, op=selectors.EVENT_READ, data=None):
         """
         Registers, modifies, or unregisters events for a file descriptor in the selector.
-        
+
         """
         key = epoll_fd.get_key(fd)
         if key:
