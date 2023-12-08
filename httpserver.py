@@ -10,7 +10,9 @@ server_socket.bind((HOST, PORT))
 server_socket.listen(1)# Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
 
+current_directory = os.path.dirname(os.path.abspath(__file__))
 
+print(f"The directory of the current file is: {current_directory}")
 def get_file_list(directory_path):
     try:
         # Get the list of files and directories in the specified path
@@ -24,6 +26,7 @@ def get_file_list(directory_path):
         # Handle any potential errors, such as permission issues or non-existent directories
         print(f"Error while getting file list: {e}")
         return []
+# def authentication():
 
 def generate_html(file_list):
     html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
@@ -46,39 +49,40 @@ def handle_client_request(client_socket):
     request_lines = request_data.split("\r\n")
 
     request_line = request_lines[0]
-
+    print(request_line.split(" "))
     method, url, _ = request_line.split(" ")
 
 
     # Implement logic based on the HTTP method
     if method == "GET":
-        if url == "/":
-            directory_path = r"C:\Users\Asus\Desktop\Computer Networks\CS305_Project\CS305_Project"  # Using a raw string
-            files = get_file_list(directory_path)
+        path = current_directory + url;
+        # if url == "/":
+               # Using a raw string
+        files = get_file_list(path)
 
-            # Render the HTML template with the file data
-            html_content = generate_html(files)
+        # Render the HTML template with the file data
+        html_content = generate_html(files)
 
-            # Send the HTML content as the response
-            headers = {
-                "Content-Length": str(len(html_content)),
-                "Content-Type": "text/html",
-                "Connection": "close"
-            }
-            response_status_line = "HTTP/1.1 200 OK\r\n"
-            response_header = ""
-            for header, value in headers.items():
-                response_header += f"{header}: {value}\r\n"
-            response_header += "\r\n"
+        # Send the HTML content as the response
+        headers = {
+            "Content-Length": str(len(html_content)),
+            "Content-Type": "text/html",
+            "Connection": "keep-alive"
+        }
+        response_status_line = "HTTP/1.1 200 OK\r\n"
+        response_header = ""
+        for header, value in headers.items():
+            response_header += f"{header}: {value}\r\n"
+        response_header += "\r\n"
 
-            # Send the response status line, headers, and HTML content
-            client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-            client_socket.sendall(html_content.encode('utf-8'))
-        elif url.startswith("/files"):
-            handle_file_request(client_socket, url)
-        else:
-            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-            client_socket.sendall(error_response.encode('utf-8'))
+        # Send the response status line, headers, and HTML content
+        client_socket.sendall((response_status_line + response_header).encode('utf-8'))
+        client_socket.sendall(html_content.encode('utf-8'))
+        # elif url.startswith("/files"):
+        #     handle_file_request(client_socket, url)
+        # else:
+        #     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+        #     client_socket.sendall(error_response.encode('utf-8'))
 
     elif method == "HEAD":
 
@@ -124,7 +128,7 @@ def handle_client_request(client_socket):
 
                             "Content-Type": content_type,
 
-                            "Connection": "close"
+                            "Connection": "keep-alive"
 
                         }
 
@@ -242,7 +246,7 @@ def handle_client_request(client_socket):
 
                         "Content-Type": "text/plain",
 
-                        "Connection": "close"
+                        "Connection": "keep-alive"
 
                     }
 
@@ -290,6 +294,7 @@ def handle_client_request(client_socket):
 
 while True:
     client_socket, client_address = server_socket.accept()
+    print("user join")
     handle_client_request(client_socket)
     client_socket.close()
 
