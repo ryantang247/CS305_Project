@@ -1,6 +1,7 @@
 import socket
 import base64
 import os
+from urllib.parse import parse_qs, urlparse
 
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
@@ -13,6 +14,72 @@ print("The server is ready to receive")
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
 print(f"The directory of the current file is: {current_directory}")
+def process_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Extract the path and query parameters
+    path = parsed_url.path.strip("/")
+    query_params = parse_qs(parsed_url.query)
+
+    # Check for the existence of certain keywords in the path or query parameters
+    if path.startswith("delete"):
+        # This is an upload/delete type URL
+        operation_type = "delete"
+        # file_path = query_params.get("path", [])[0]  # Extract the file path from the query parameters
+    elif path.startswith("upload"):
+        operation_type = "upload"
+    elif path and len(path.split("/")) == 2:
+        # This is a valid download type URL with both {name} and {file_name} segments
+        operation_type = "download"
+    elif "SUSTech-HTTP" in query_params:
+        # This is a view type URL
+        operation_type = "view"
+    else:
+        # Unknown or unsupported URL type
+        operation_type = "unknown"
+
+    return operation_type
+
+
+def extract_name_from_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Extract the path
+    path = parsed_url.path.strip("/")
+
+    # Split the path by "/" and get the second segment
+    path_segments = path.split("/")
+
+    # Check if there are at least 1 segments (may need modify)
+    if len(path_segments) >= 1:
+        # Extract the second segment, which is the {name} part
+        name = path_segments[0]
+        return name
+    else:
+        # Return None or raise an exception based on your specific requirement
+        return None
+
+def extract_file_from_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Extract the path
+    path = parsed_url.path.strip("/")
+
+    # Split the path by "/" and get the second segment
+    path_segments = path.split("/")
+
+    # Check if there are at least 1 segments (may need modify)
+    if len(path_segments) >= 2:
+        # Extract the second segment, which is the {name} part
+        name = path_segments[1]
+        return name
+    else:
+        # Return None or raise an exception based on your specific requirement
+        return None
+
 def get_file_list(directory_path):
     try:
         # Get the list of files and directories in the specified path
