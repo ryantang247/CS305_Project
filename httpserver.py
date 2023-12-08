@@ -2,13 +2,13 @@ import socket
 import base64
 import os
 from urllib.parse import parse_qs, urlparse
-
+account = {'client1': '123'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
-server_socket.listen(1)# Listen for incoming connections, queue up to 5 requests
+server_socket.listen(100)# Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -107,11 +107,46 @@ def generate_html(file_list):
     html_content += "</ul>\n</body>\n</html>"
 
     return html_content
+def authenticate(headers):
+    try:
+        auth_header = headers.get("Authorization")
 
+
+        if auth_header and auth_header.startswith("Basic "):
+            encoded_credentials = auth_header.split(" ")[1]
+            credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+            print("credentials",credentials)
+            # Replace this with your authentication logic
+            username, password = credentials.split(":")
+
+            # Check if the username exists in the account dictionary
+            if username in account and account[username] == password:
+                return True
+            else:
+                return False
+
+        return False
+    except Exception as e:
+        return False
+def extractHeader(request_data):
+    request_lines = request_data.split("\r\n")
+    headers = {}
+    for line in request_lines[1:]:
+        if line:
+            key, value = line.split(":", 1)  # Split at the first occurrence of ":"
+            headers[key.strip()] = value.strip()
+    return headers
 def handle_client_request(client_socket):
     # Receive data from the client
     request_data = client_socket.recv(1024).decode("utf-8")
     print(request_data)
+
+    authenticated = authenticate(extractHeader(request_data))
+    if(authenticated == False):
+        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+
+        client_socket.sendall(error_response.encode('utf-8'))
+        return
     # Parse HTTP request
     request_lines = request_data.split("\r\n")
 
@@ -120,8 +155,12 @@ def handle_client_request(client_socket):
     method, url, _ = request_line.split(" ")
 
 
+
+
+
     # Implement logic based on the HTTP method
     if method == "GET":
+
         path = current_directory + url;
         # if url == "/":
                # Using a raw string
@@ -151,100 +190,47 @@ def handle_client_request(client_socket):
         #     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
         #     client_socket.sendall(error_response.encode('utf-8'))
 
-    elif method == "HEAD":
+    if method == "HEAD":
 
-        # Handle HEAD request - retrieve headers only
+        path = current_directory + url
 
-        # Similar to GET but without the response body
+        # Process as required for HEAD request
 
-        try:
-            print(url)
-            print("get here",open(url, 'rb'))
-            with open(url[1:], 'rb') as file:
-                print("get here2")
-                file_content = file.read()
+        if os.path.exists(path):  # Check if the requested resource exists
 
-                content_length = len(file_content)
+            # File exists, construct the headers
 
-                content_type = "text/plain"  # Adjust content type based on the file
+            headers = {
 
-                # Check for Authorization header
+                "Content-Length": str(os.path.getsize(path)),  # Assuming file size is the content length for HEAD
 
-                auth_header = headers.get("Authorization")
-                if auth_header and auth_header.startswith("Basic "):
+                "Content-Type": "application/octet-stream",  # Modify as per your file type
 
-                    # Extract credentials and decode base64
-                    credentials_base64 = auth_header.split(" ")[1]
+                "Connection": "keep-alive"
 
-                    credentials = base64.b64decode(credentials_base64).decode('utf-8')
-                    print(credentials)
+            }
 
-                    # Now credentials will be in the format 'username:password'
+            response_status_line = "HTTP/1.1 200 OK\r\n"
 
-                    # Verify credentials (this is a placeholder, replace it with your authentication logic)
+            response_header = ""
 
-                    expected_credentials = "client1:123"  # Placeholder for expected credentials
+            for header, value in headers.items():
+                response_header += f"{header}: {value}\r\n"
 
-                    if credentials == expected_credentials:
+            response_header += "\r\n"
 
-                        # Construct headers
+            # Send the response status line and headers (without body)
 
-                        headers = {
+            client_socket.sendall((response_status_line + response_header).encode('utf-8'))
 
-                            "Content-Length": str(content_length),
+        else:
 
-                            "Content-Type": content_type,
-
-                            "Connection": "keep-alive"
-
-                        }
-
-                        # Construct the response status line
-
-                        response_status_line = "HTTP/1.1 200 OK\r\n"
-
-                        # Construct the response header
-
-                        response_header = ""
-
-                        for header, value in headers.items():
-                            response_header += f"{header}: {value}\r\n"
-
-                        # Append an empty line to indicate the end of headers
-
-                        response_header += "\r\n"
-
-                        # Send the response status line and headers
-
-                        client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-
-                        return  # Exit after sending headers without sending content
-
-                    else:
-
-                        # Unauthorized - incorrect credentials
-
-                        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-
-                        client_socket.sendall(error_response.encode('utf-8'))
-
-                        return  # Exit without processing further if unauthorized
-
-                else:
-
-                    # Authorization header not provided
-
-                    error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
-
-                    client_socket.sendall(error_response.encode('utf-8'))
-
-        except FileNotFoundError:
-
-            # Handle file not found error
+            # File doesn't exist, handle accordingly with a 404 Not Found response
 
             error_response = "HTTP/1.1 404 Not Found\r\n\r\nFile Not Found"
 
             client_socket.sendall(error_response.encode('utf-8'))
+
 
 
     elif method == "POST":
@@ -358,11 +344,12 @@ def handle_client_request(client_socket):
                 error_response = f"HTTP/1.1 500 Internal Server Error\r\n\r\n{error_message}"
 
                 client_socket.sendall(error_response.encode('utf-8'))
-
+client_thread = []
 while True:
     client_socket, client_address = server_socket.accept()
-    print("user join")
+    # client_thread.append(client_socket)
+    # print(f"User {client_socket} joined")
     handle_client_request(client_socket)
-    client_socket.close()
-
+    client_socket.close();
+    # print("user left")
 
