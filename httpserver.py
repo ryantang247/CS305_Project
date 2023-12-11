@@ -5,15 +5,8 @@ import os
 from urllib.parse import parse_qs, urlparse
 import hashlib
 from datetime import datetime
-<<<<<<< HEAD
 import threading
 account = {'client1': '123','client2': '123','client3': '123'}
-=======
-
-account = {'client1': '123'}
-HOST = '127.0.0.1'  # localhost
-PORT = 8080  # Use a port number
->>>>>>> 0e306c68775aa5e8281c4d748aa065d00d453d66
 
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -110,10 +103,6 @@ session_storage = {}
 def handle_login(username, password):
     # Validate username and password (your authentication logic)
     # If login successful:
-<<<<<<< HEAD
-=======
-    print("get here", username, password)
->>>>>>> 0e306c68775aa5e8281c4d748aa065d00d453d66
     session_id = generate_unique_session_id(username)  # Generate a unique session ID
     session_storage[username] = session_id  # Store session ID for the user
     return session_id
@@ -159,12 +148,7 @@ def authenticate(headers):
             # Check if the username exists in the account dictionary
             if username in account and account[username] == password:
                 session_id = handle_login(username, password)
-<<<<<<< HEAD
                 return True, session_id,username
-=======
-                print(session_id)
-                return True, session_id, username
->>>>>>> 0e306c68775aa5e8281c4d748aa065d00d453d66
             else:
                 return False
 
