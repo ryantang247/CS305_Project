@@ -4,14 +4,9 @@ import os
 from urllib.parse import parse_qs, urlparse
 import hashlib
 from datetime import datetime
-account = {'client1': '123'}
-HOST = '127.0.0.1'  # localhost
-PORT = 8080  # Use a port number
+import threading
+account = {'client1': '123','client2': '123','client3': '123'}
 
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind((HOST, PORT))
-server_socket.listen(100)  # Listen for incoming connections, queue up to 5 requests
-print("The server is ready to receive")
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
@@ -104,7 +99,6 @@ session_storage = {}
 def handle_login(username, password):
     # Validate username and password (your authentication logic)
     # If login successful:
-    print("get here",username, password )
     session_id = generate_unique_session_id(username)  # Generate a unique session ID
     session_storage[username] = session_id  # Store session ID for the user
     return session_id
@@ -149,7 +143,6 @@ def authenticate(headers):
             # Check if the username exists in the account dictionary
             if username in account and account[username] == password:
                 session_id = handle_login(username, password)
-                print(session_id)
                 return True, session_id,username
             else:
                 return False
@@ -181,10 +174,16 @@ def get_key_from_value(dictionary, search_value):
     return None
 def handle_client_request(client_socket):
     # Receive data from the client
+    # incr = 1;
     # while True:
+    #     incr = incr + 1
+    #     print("haha",incr)
+    #     print(client_socket)
     username = None
     session_id = None
     request_data = client_socket.recv(1024).decode("utf-8")
+    if not request_data:
+        return "Bye"
     authenticated = None
     print(request_data)
     try:
@@ -399,12 +398,14 @@ def handle_client_request(client_socket):
         # Return 405 Method Not Allowed for other methods
         error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
         client_socket.sendall(error_response.encode('utf-8'))
-        # print(extractHeader(request_data))
-        # if 'Connection' in extractHeader(request_data):
+
+        # connection_header = extractHeader(request_data)['Connection'].lower()
+        # print("connection_header",connection_header)
         #
-        #     connection_header = headers['Connection'].lower()
-        #     if connection_header == 'close':
-        #         print("close")
+        # if connection_header == 'close':
+        #     client_socket.close()
+        #     break;
+
 
 
     def upload(client_socket, url, received_data, headers):
@@ -501,11 +502,29 @@ def handle_client_request(client_socket):
             error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
             client_socket.sendall(error_response.encode('utf-8'))
 
+SERVER = '127.0.0.1'  # localhost
+PORT = 8080  # Use a port number
+ # Listen for incoming connections, queue up to 5 requests
+print("The server is ready to receive")
+def client_thread(conn, addr):
+    with conn:
+        print(f"[CONNECTION] Connected to {addr}")
+        while True:
 
-while True:
-    client_socket, client_address = server_socket.accept()
-    print(client_address)
-    # client_thread.append(client_socket)
-    # print(f"User {client_socket} joined")
-    handle_client_request(client_socket)
-    client_socket.close()
+            data = handle_client_request(conn)
+            if data == "Bye":
+                break
+
+    print(f"[CONNECTION] Disconnected from {addr}")
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((SERVER, PORT))
+    s.listen(5)
+    print(f"[INFO] Listening on {SERVER}:{PORT}")
+
+    while True:
+        conn, addr = s.accept()
+        print(f"[INFO] Starting thread for connection {addr}")
+        thread = threading.Thread(target=client_thread, args=(conn, addr))
+        thread.start()
+
