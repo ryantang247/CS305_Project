@@ -5,6 +5,7 @@ import os
 from urllib.parse import parse_qs, urlparse
 import hashlib
 from datetime import datetime
+
 account = {'client1': '123'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
@@ -101,17 +102,20 @@ def get_file_list(directory_path):
         print(f"Error while getting file list: {e}")
         return []
 
+
 session_storage = {}
+
+
 def handle_login(username, password):
     # Validate username and password (your authentication logic)
     # If login successful:
-    print("get here",username, password )
+    print("get here", username, password)
     session_id = generate_unique_session_id(username)  # Generate a unique session ID
     session_storage[username] = session_id  # Store session ID for the user
     return session_id
 
-def generate_unique_session_id(username):
 
+def generate_unique_session_id(username):
     current_time = datetime.now().isoformat()  # Get current time as string
     # Concatenate username and current time for uniqueness
 
@@ -121,6 +125,7 @@ def generate_unique_session_id(username):
     hashed_data = hashlib.sha256(data.encode()).hexdigest()
 
     return hashed_data[:10]
+
 
 def generate_html(file_list):
     html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
@@ -151,7 +156,7 @@ def authenticate(headers):
             if username in account and account[username] == password:
                 session_id = handle_login(username, password)
                 print(session_id)
-                return True, session_id,username
+                return True, session_id, username
             else:
                 return False
 
@@ -175,11 +180,36 @@ def extractHeader(request_data):
     return headers
 
 
+def extractData(request_data):
+    # Extract content length from headers
+    headers = extractHeader(request_data)
+    content_length = int(headers.get("Content-Length", 0))
+
+    # Extract data from the request body
+    data_start = request_data.find("\r\n\r\n") + 4  # Find the position where data starts
+    data = request_data[data_start:data_start + content_length]
+
+    return data
+
+
 def get_key_from_value(dictionary, search_value):
     for key, value in dictionary.items():
         if value == search_value:
             return key
     return None
+
+
+def isDeleteMethod(url):
+    # Convert the URL to lowercase for case-insensitive comparison
+    lowercase_url = url.lower()
+
+    # Check if "delete" is present in the URL
+    if "delete" in lowercase_url:
+        return True
+    else:
+        return False
+
+
 def handle_client_request(client_socket):
     # Receive data from the client
     # while True:
@@ -189,12 +219,12 @@ def handle_client_request(client_socket):
     authenticated = None
     print(request_data)
     try:
-        print('cookie',extractHeader(request_data)['Cookie'])
-        if (extractHeader(request_data)['Cookie']):
+        print('cookie', extractHeader(request_data)['Cookie'])
+        if extractHeader(request_data)['Cookie']:
             username = get_key_from_value(session_storage, extractHeader(request_data)['Cookie'])
-            if(username == None):
+            if username is None:
                 authenticated = authenticate(extractHeader(request_data))
-                if (authenticated == False):
+                if not authenticated:
                     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
                     client_socket.sendall(error_response.encode('utf-8'))
@@ -204,7 +234,7 @@ def handle_client_request(client_socket):
         else:
             print("user not yet auth")
             authenticated = authenticate(extractHeader(request_data))
-            if (authenticated == False):
+            if not authenticated:
                 error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
                 client_socket.sendall(error_response.encode('utf-8'))
@@ -212,7 +242,7 @@ def handle_client_request(client_socket):
             session_id = authenticated[1]
             username = authenticated[2]
     except Exception as e:
-        print("exception on auth",e)
+        print("exception on auth", e)
         authenticated = authenticate(extractHeader(request_data))
         if (authenticated == False):
             error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
@@ -271,15 +301,10 @@ def handle_client_request(client_socket):
             # File exists, construct the headers
 
             headers = {
-
                 "Content-Length": str(os.path.getsize(path)),  # Assuming file size is the content length for HEAD
-
                 "Content-Type": "application/octet-stream",  # Modify as per your file type
-
                 "Connection": "keep-alive",
-
                 "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
-
             }
 
             response_status_line = "HTTP/1.1 200 OK\r\n"
@@ -296,11 +321,8 @@ def handle_client_request(client_socket):
             client_socket.sendall((response_status_line + response_header).encode('utf-8'))
 
         else:
-
             # File doesn't exist, handle accordingly with a 404 Not Found response
-
             error_response = "HTTP/1.1 404 Not Found\r\n\r\nFile Not Found"
-
             client_socket.sendall(error_response.encode('utf-8'))
 
 
@@ -316,7 +338,7 @@ def handle_client_request(client_socket):
                 client_socket.sendall(error_response.encode('utf-8'))
                 return
             content_length = int(_headers.get("Content-Length", 0))
-            if content_length == 0:
+            if (content_length == 0) and (isDeleteMethod(url=url) == False):
                 # If Content-Length is specified as zero for POST, it's an invalid request
                 error_response = "HTTP/1.1 400 Bad Request\r\n\r\nInvalid Content-Length for POST"
                 client_socket.sendall(error_response.encode('utf-8'))
@@ -326,8 +348,11 @@ def handle_client_request(client_socket):
             print("length: ", content_length)
             # Receive data until the full content is received based on the Content-Length
 
+            data = extractData(request_data)
+            # print("*** POST Data", data)
             while len(received_data) < content_length:
-                received_data += client_socket.recv(1024)
+                received_data += data.encode()
+                print(received_data)
 
             # Check for Authorization header
 
@@ -370,14 +395,15 @@ def handle_client_request(client_socket):
 
                     # Send the response status line, headers, and response body
                     client_socket.sendall((response_status_line + response_header + response_body).encode('utf-8'))
-
+                    print(process_url(url))
                     if process_url(url=url) == 'upload':
                         # Upload Method
-                        upload(client_socket=client_socket, url=url, received_data=received_data, username=username, headers=headers)
+                        upload(client_socket=client_socket, url=url, received_data=received_data, username=username,
+                               headers=headers)
 
                     elif process_url(url=url) == 'delete':
                         # Delete Method
-                        delete(client_socket=client_socket, url=url, received_data=received_data,username=username)
+                        delete(client_socket=client_socket, url=url, received_data=received_data, username=username)
 
 
                 else:
@@ -395,7 +421,7 @@ def handle_client_request(client_socket):
         except Exception as e:
             error_message = f"An error occurred: {str(e)}"
             error_response = f"HTTP/1.1 500 Internal Server Error\r\n\r\n{error_message}"
-            print("****** Error: " + str(e) + "\n")
+            # print("****** Error: " + str(e) + "\n")
             client_socket.sendall(error_response.encode('utf-8'))
 
     else:
@@ -415,6 +441,7 @@ def upload(client_socket, url, received_data, username, headers):
     if process_url(url=url) == 'upload':
         # Extract query parameters using parse_qs
         query_params = parse_qs(urlparse(url).query)
+        # print("****** Query Params: ", query_params)
 
         # Check for the "path" parameter in the query
         upload_path = query_params.get('path', [''])[0]
@@ -429,21 +456,16 @@ def upload(client_socket, url, received_data, username, headers):
             error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
             client_socket.sendall(error_response.encode('utf-8'))
             return
-        # Check if the target directory exists
-        target_directory = os.path.join(os.getcwd(), "data", upload_path)
-        if not os.path.exists(target_directory):
-            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
-            client_socket.sendall(error_response.encode('utf-8'))
-            return
-
 
         if upload_path.startswith(username):
             # Extract the filename from the Content-Disposition header, if available
             content_disposition = headers.get("Content-Disposition")
             if content_disposition:
-                _, params = cgi.parse_header(content_disposition)
-                filename = params.get("filename")
-                if filename:
+                # Manual parsing of Content-Disposition header
+                _, params = content_disposition.split(";")
+                filename_param = [param.strip() for param in params.split("=")]
+                if filename_param[0].lower() == "filename" and len(filename_param) == 2:
+                    filename = filename_param[1].strip("\"'")
                     file_path = os.path.join(target_directory, filename)
                     with open(file_path, 'wb') as file:
                         file.write(received_data)
@@ -468,26 +490,24 @@ def upload(client_socket, url, received_data, username, headers):
         client_socket.sendall(error_response.encode('utf-8'))
 
 
-
-
 def delete(client_socket, url, received_data, username):
     # Extract query parameters using parse_qs
     query_params = parse_qs(urlparse(url).query)
 
     # Check for the "path" parameter in the query
     delete_path = query_params.get('path', [''])[0]
+    print(delete_path)
     if not delete_path:
         error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
         client_socket.sendall(error_response.encode('utf-8'))
         return
 
-        # Check if the target file exists
-        target_file = os.path.join(os.getcwd(), "data", delete_path)
-        if not os.path.exists(target_file):
-            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget file does not exist"
-            client_socket.sendall(error_response.encode('utf-8'))
-            return
-
+    # Check if the target file exists
+    target_file = os.path.join(os.getcwd(), "data", delete_path)
+    if not os.path.exists(target_file):
+        error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget file does not exist"
+        client_socket.sendall(error_response.encode('utf-8'))
+        return
 
     if delete_path.startswith(username):
         # Ensure that the file is under the user's directory
@@ -499,7 +519,6 @@ def delete(client_socket, url, received_data, username):
     else:
         error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to delete this file"
         client_socket.sendall(error_response.encode('utf-8'))
-
 
 
 while True:
