@@ -1,15 +1,84 @@
 import socket
 import base64
 import os
-
+from urllib.parse import parse_qs, urlparse
+account = {'client1': '123'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
-server_socket.listen(1)  # Listen for incoming connections, queue up to 5 requests
+server_socket.listen(100)# Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
 
+current_directory = os.path.dirname(os.path.abspath(__file__))
+
+print(f"The directory of the current file is: {current_directory}")
+def process_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Extract the path and query parameters
+    path = parsed_url.path.strip("/")
+    query_params = parse_qs(parsed_url.query)
+
+    # Check for the existence of certain keywords in the path or query parameters
+    if path.startswith("delete"):
+        # This is an upload/delete type URL
+        operation_type = "delete"
+        # file_path = query_params.get("path", [])[0]  # Extract the file path from the query parameters
+    elif path.startswith("upload"):
+        operation_type = "upload"
+    elif path and len(path.split("/")) == 2:
+        # This is a valid download type URL with both {name} and {file_name} segments
+        operation_type = "download"
+    elif "SUSTech-HTTP" in query_params:
+        # This is a view type URL
+        operation_type = "view"
+    else:
+        # Unknown or unsupported URL type
+        operation_type = "unknown"
+
+    return operation_type
+
+
+def extract_name_from_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Extract the path
+    path = parsed_url.path.strip("/")
+
+    # Split the path by "/" and get the second segment
+    path_segments = path.split("/")
+
+    # Check if there are at least 1 segments (may need modify)
+    if len(path_segments) >= 1:
+        # Extract the second segment, which is the {name} part
+        name = path_segments[0]
+        return name
+    else:
+        # Return None or raise an exception based on your specific requirement
+        return None
+
+def extract_file_from_url(url):
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Extract the path
+    path = parsed_url.path.strip("/")
+
+    # Split the path by "/" and get the second segment
+    path_segments = path.split("/")
+
+    # Check if there are at least 1 segments (may need modify)
+    if len(path_segments) >= 2:
+        # Extract the second segment, which is the {name} part
+        name = path_segments[1]
+        return name
+    else:
+        # Return None or raise an exception based on your specific requirement
+        return None
 
 def get_file_list(directory_path):
     try:
@@ -24,6 +93,7 @@ def get_file_list(directory_path):
         # Handle any potential errors, such as permission issues or non-existent directories
         print(f"Error while getting file list: {e}")
         return []
+# def authentication():
 
 
 def generate_html(file_list):
@@ -38,179 +108,130 @@ def generate_html(file_list):
     html_content += "</ul>\n</body>\n</html>"
 
     return html_content
+def authenticate(headers):
+    try:
+        auth_header = headers.get("Authorization")
 
 
+        if auth_header and auth_header.startswith("Basic "):
+            encoded_credentials = auth_header.split(" ")[1]
+            credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+            print("credentials",credentials)
+            # Replace this with your authentication logic
+            username, password = credentials.split(":")
+
+            # Check if the username exists in the account dictionary
+            if username in account and account[username] == password:
+                return True
+            else:
+                return False
+
+        return False
+    except Exception as e:
+        return False
+def extractHeader(request_data):
+    request_lines = request_data.split("\r\n")
+    headers = {}
+    for line in request_lines[1:]:
+        if line:
+            key, value = line.split(":", 1)  # Split at the first occurrence of ":"
+            headers[key.strip()] = value.strip()
+    return headers
 def handle_client_request(client_socket):
     # Receive data from the client
     request_data = client_socket.recv(1024).decode("utf-8")
     print(request_data)
+
+    authenticated = authenticate(extractHeader(request_data))
+    if(authenticated == False):
+        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+
+        client_socket.sendall(error_response.encode('utf-8'))
+        return
     # Parse HTTP request
     request_lines = request_data.split("\r\n")
 
     request_line = request_lines[0]
-
+    print(request_line.split(" "))
     method, url, _ = request_line.split(" ")
+
+
+
+
 
     # Implement logic based on the HTTP method
     if method == "GET":
-        try:
-            if url == "/":
-                directory_path = r"C:\Users\Asus\Desktop\Computer Networks\CS305_Project\CS305_Project"  # Using a raw string
-                files = get_file_list(directory_path)
 
-                # Render the HTML template with the file data
-                html_content = generate_html(files)
+        path = current_directory + url;
+        # if url == "/":
+               # Using a raw string
+        files = get_file_list(path)
 
-                # Send the HTML content as the response
-                headers = {
-                    "Content-Length": str(len(html_content)),
-                    "Content-Type": "text/html",
-                    "Connection": "close"
-                }
-                response_status_line = "HTTP/1.1 200 OK\r\n"
-                response_header = ""
-                for header, value in headers.items():
-                    response_header += f"{header}: {value}\r\n"
-                response_header += "\r\n"
+        # Render the HTML template with the file data
+        html_content = generate_html(files)
 
-                # Send the response status line, headers, and HTML content
-                client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-                client_socket.sendall(html_content.encode('utf-8'))
-            elif url.startswith("/files"):
-                handle_file_request(client_socket, url)
-            else:
-                error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-                client_socket.sendall(error_response.encode('utf-8'))
+        # Send the HTML content as the response
+        headers = {
+            "Content-Length": str(len(html_content)),
+            "Content-Type": "text/html",
+            "Connection": "keep-alive"
+        }
+        response_status_line = "HTTP/1.1 200 OK\r\n"
+        response_header = ""
+        for header, value in headers.items():
+            response_header += f"{header}: {value}\r\n"
+        response_header += "\r\n"
 
-        except Exception as e:
-            error_message = f"An error occurred: {str(e)}"
-            error_response = f"HTTP/1.1 500 Internal Server Error\r\n\r\n{error_message}"
+        # Send the response status line, headers, and HTML content
+        client_socket.sendall((response_status_line + response_header).encode('utf-8'))
+        client_socket.sendall(html_content.encode('utf-8'))
+        # elif url.startswith("/files"):
+        #     handle_file_request(client_socket, url)
+        # else:
+        #     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+        #     client_socket.sendall(error_response.encode('utf-8'))
 
-            client_socket.sendall(error_response.encode('utf-8'))
+    if method == "HEAD":
 
+        path = current_directory + url
 
-    # # Ensure each user has their own directory
-    # auth_header = headers.get("Authorization")
-    # if auth_header and auth_header.startswith("Basic "):
-    #     credentials_base64 = auth_header.split(" ")[1]
-    #     credentials = base64.b64decode(credentials_base64).decode('utf-8')
-    #     username, _ = credentials.split(":")
-    #
-    #     # Check if the user has permission to upload in their own directory
-    #     if username not in allowed_users:
-    #         error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to upload files"
-    #         client_socket.sendall(error_response.encode('utf-8'))
-    #         return
-    #
-    #     # Create user directory if it doesn't exist
-    #     user_directory = os.path.join(os.getcwd(), "data", username)
-    #     if not os.path.exists(user_directory):
-    #         os.makedirs(user_directory)
-    #
-    #     # Ensure that users can only access their own directories
-    #     if username not in allowed_users:
-    #         error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to access this directory"
-    #         client_socket.sendall(error_response.encode('utf-8'))
-    #         return
-    #
-    # # Parse HTTP request
-    # request_lines = request_data.split("\r\n")
-    # request_line = request_lines[0]
-    # method, url, _ = request_line.split(" ")
+        # Process as required for HEAD request
 
-    elif method == "HEAD":
+        if os.path.exists(path):  # Check if the requested resource exists
 
-        # Handle HEAD request - retrieve headers only
+            # File exists, construct the headers
 
-        # Similar to GET but without the response body
+            headers = {
 
-        try:
+                "Content-Length": str(os.path.getsize(path)),  # Assuming file size is the content length for HEAD
 
-            with open(url[1:], 'rb') as file:
+                "Content-Type": "application/octet-stream",  # Modify as per your file type
 
-                file_content = file.read()
+                "Connection": "keep-alive"
 
-                content_length = len(file_content)
+            }
 
-                content_type = "text/plain"  # Adjust content type based on the file
+            response_status_line = "HTTP/1.1 200 OK\r\n"
 
-                # Check for Authorization header
+            response_header = ""
 
-                auth_header = headers.get("Authorization")
-                if auth_header and auth_header.startswith("Basic "):
+            for header, value in headers.items():
+                response_header += f"{header}: {value}\r\n"
 
-                    # Extract credentials and decode base64
-                    credentials_base64 = auth_header.split(" ")[1]
+            response_header += "\r\n"
 
-                    credentials = base64.b64decode(credentials_base64).decode('utf-8')
-                    print(credentials)
+            # Send the response status line and headers (without body)
 
-                    # Now credentials will be in the format 'username:password'
+            client_socket.sendall((response_status_line + response_header).encode('utf-8'))
 
-                    # Verify credentials (this is a placeholder, replace it with your authentication logic)
+        else:
 
-                    expected_credentials = "client1:123"  # Placeholder for expected credentials
-
-                    if credentials == expected_credentials:
-
-                        # Construct headers
-
-                        headers = {
-
-                            "Content-Length": str(content_length),
-
-                            "Content-Type": content_type,
-
-                            "Connection": "close"
-
-                        }
-
-                        # Construct the response status line
-
-                        response_status_line = "HTTP/1.1 200 OK\r\n"
-
-                        # Construct the response header
-
-                        response_header = ""
-
-                        for header, value in headers.items():
-                            response_header += f"{header}: {value}\r\n"
-
-                        # Append an empty line to indicate the end of headers
-
-                        response_header += "\r\n"
-
-                        # Send the response status line and headers
-
-                        client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-
-                        return  # Exit after sending headers without sending content
-
-                    else:
-
-                        # Unauthorized - incorrect credentials
-
-                        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-
-                        client_socket.sendall(error_response.encode('utf-8'))
-
-                        return  # Exit without processing further if unauthorized
-
-                else:
-
-                    # Authorization header not provided
-
-                    error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
-
-                    client_socket.sendall(error_response.encode('utf-8'))
-
-        except FileNotFoundError:
-
-            # Handle file not found error
+            # File doesn't exist, handle accordingly with a 404 Not Found response
 
             error_response = "HTTP/1.1 404 Not Found\r\n\r\nFile Not Found"
 
             client_socket.sendall(error_response.encode('utf-8'))
+
 
 
     elif method == "POST":
@@ -263,7 +284,9 @@ def handle_client_request(client_socket):
                     headers = {
                         "Content-Length": str(len(response_body)),
                         "Content-Type": "text/plain",
-                        "Connection": "close"
+
+                        "Connection": "keep-alive"
+
                     }
                     response_status_line = "HTTP/1.1 200 OK\r\n"
 
@@ -405,5 +428,7 @@ def delete(client_socket, url, received_data):
 
 while True:
     client_socket, client_address = server_socket.accept()
+    # client_thread.append(client_socket)
+    # print(f"User {client_socket} joined")
     handle_client_request(client_socket)
     client_socket.close()
