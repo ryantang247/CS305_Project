@@ -131,6 +131,7 @@ def authenticate(headers):
 def extractHeader(request_data):
     request_lines = request_data.split("\r\n")
     headers = {}
+    print()
     for line in request_lines[1:]:
         if line:
             key, value = line.split(":", 1)  # Split at the first occurrence of ":"
@@ -347,6 +348,7 @@ def handle_client_request(client_socket):
 client_thread = []
 while True:
     client_socket, client_address = server_socket.accept()
+    print(client_address)
     # client_thread.append(client_socket)
     # print(f"User {client_socket} joined")
     handle_client_request(client_socket)
