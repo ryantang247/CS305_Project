@@ -3,7 +3,8 @@ import socket
 import base64
 import os
 from urllib.parse import parse_qs, urlparse
-
+import hashlib
+from datetime import datetime
 account = {'client1': '123'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
@@ -100,9 +101,26 @@ def get_file_list(directory_path):
         print(f"Error while getting file list: {e}")
         return []
 
+session_storage = {}
+def handle_login(username, password):
+    # Validate username and password (your authentication logic)
+    # If login successful:
+    print("get here",username, password )
+    session_id = generate_unique_session_id(username)  # Generate a unique session ID
+    session_storage[username] = session_id  # Store session ID for the user
+    return session_id
 
-# def authentication():
+def generate_unique_session_id(username):
 
+    current_time = datetime.now().isoformat()  # Get current time as string
+    # Concatenate username and current time for uniqueness
+
+    data = f"{username}-{current_time}"
+
+    # Use hashlib to hash the data (you can choose any hashing algorithm)
+    hashed_data = hashlib.sha256(data.encode()).hexdigest()
+
+    return hashed_data[:10]
 
 def generate_html(file_list):
     html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
@@ -131,7 +149,9 @@ def authenticate(headers):
 
             # Check if the username exists in the account dictionary
             if username in account and account[username] == password:
-                return True
+                session_id = handle_login(username, password)
+                print(session_id)
+                return True, session_id,username
             else:
                 return False
 
@@ -143,6 +163,7 @@ def authenticate(headers):
 def extractHeader(request_data):
     request_lines = request_data.split("\r\n")
     headers = {}
+    print()
     for line in request_lines[1:]:
         if line:
             parts = line.split(":", 1)  # Split at the first occurrence of ":"
@@ -154,18 +175,52 @@ def extractHeader(request_data):
     return headers
 
 
-
+def get_key_from_value(dictionary, search_value):
+    for key, value in dictionary.items():
+        if value == search_value:
+            return key
+    return None
 def handle_client_request(client_socket):
     # Receive data from the client
+    # while True:
+    username = None
+    session_id = None
     request_data = client_socket.recv(1024).decode("utf-8")
+    authenticated = None
     print(request_data)
+    try:
+        print('cookie',extractHeader(request_data)['Cookie'])
+        if (extractHeader(request_data)['Cookie']):
+            username = get_key_from_value(session_storage, extractHeader(request_data)['Cookie'])
+            if(username == None):
+                authenticated = authenticate(extractHeader(request_data))
+                if (authenticated == False):
+                    error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
-    authenticated = authenticate(extractHeader(request_data))
-    if (authenticated == False):
-        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+                    client_socket.sendall(error_response.encode('utf-8'))
+                    return
+                session_id = authenticated[1]
+                username = authenticated[2]
+        else:
+            print("user not yet auth")
+            authenticated = authenticate(extractHeader(request_data))
+            if (authenticated == False):
+                error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
+                client_socket.sendall(error_response.encode('utf-8'))
+                return
+            session_id = authenticated[1]
+            username = authenticated[2]
+    except Exception as e:
+        print("exception on auth",e)
+        authenticated = authenticate(extractHeader(request_data))
+        if (authenticated == False):
+            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
+        session_id = authenticated[1]
+        username = authenticated[2]
     # Parse HTTP request
     request_lines = request_data.split("\r\n")
 
@@ -221,7 +276,9 @@ def handle_client_request(client_socket):
 
                 "Content-Type": "application/octet-stream",  # Modify as per your file type
 
-                "Connection": "keep-alive"
+                "Connection": "keep-alive",
+
+                "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
 
             }
 
@@ -345,6 +402,12 @@ def handle_client_request(client_socket):
         # Return 405 Method Not Allowed for other methods
         error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
         client_socket.sendall(error_response.encode('utf-8'))
+        # print(extractHeader(request_data))
+        # if 'Connection' in extractHeader(request_data):
+        #
+        #     connection_header = headers['Connection'].lower()
+        #     if connection_header == 'close':
+        #         print("close")
 
 
 def upload(client_socket, url, received_data, username, headers):
@@ -360,6 +423,12 @@ def upload(client_socket, url, received_data, username, headers):
             client_socket.sendall(error_response.encode('utf-8'))
             return
 
+        # Check if the target directory exists
+        target_directory = os.path.join(os.getcwd(), "data", upload_path)
+        if not os.path.exists(target_directory):
+            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
         # Check if the target directory exists
         target_directory = os.path.join(os.getcwd(), "data", upload_path)
         if not os.path.exists(target_directory):
@@ -412,12 +481,12 @@ def delete(client_socket, url, received_data, username):
         client_socket.sendall(error_response.encode('utf-8'))
         return
 
-    # Check if the target file exists
-    target_file = os.path.join(os.getcwd(), "data", delete_path)
-    if not os.path.exists(target_file):
-        error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget file does not exist"
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
+        # Check if the target file exists
+        target_file = os.path.join(os.getcwd(), "data", delete_path)
+        if not os.path.exists(target_file):
+            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget file does not exist"
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
 
 
     if delete_path.startswith(username):
@@ -435,6 +504,7 @@ def delete(client_socket, url, received_data, username):
 
 while True:
     client_socket, client_address = server_socket.accept()
+    print(client_address)
     # client_thread.append(client_socket)
     # print(f"User {client_socket} joined")
     handle_client_request(client_socket)
