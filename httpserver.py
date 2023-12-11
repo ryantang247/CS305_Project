@@ -2,18 +2,21 @@ import socket
 import base64
 import os
 from urllib.parse import parse_qs, urlparse
+
 account = {'client1': '123'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
-server_socket.listen(100)# Listen for incoming connections, queue up to 5 requests
+server_socket.listen(100)  # Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
 print(f"The directory of the current file is: {current_directory}")
+
+
 def process_url(url):
     # Parse the URL
     parsed_url = urlparse(url)
@@ -61,6 +64,7 @@ def extract_name_from_url(url):
         # Return None or raise an exception based on your specific requirement
         return None
 
+
 def extract_file_from_url(url):
     # Parse the URL
     parsed_url = urlparse(url)
@@ -80,6 +84,7 @@ def extract_file_from_url(url):
         # Return None or raise an exception based on your specific requirement
         return None
 
+
 def get_file_list(directory_path):
     try:
         # Get the list of files and directories in the specified path
@@ -93,6 +98,8 @@ def get_file_list(directory_path):
         # Handle any potential errors, such as permission issues or non-existent directories
         print(f"Error while getting file list: {e}")
         return []
+
+
 # def authentication():
 
 
@@ -108,15 +115,16 @@ def generate_html(file_list):
     html_content += "</ul>\n</body>\n</html>"
 
     return html_content
+
+
 def authenticate(headers):
     try:
         auth_header = headers.get("Authorization")
 
-
         if auth_header and auth_header.startswith("Basic "):
             encoded_credentials = auth_header.split(" ")[1]
             credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-            print("credentials",credentials)
+            print("credentials", credentials)
             # Replace this with your authentication logic
             username, password = credentials.split(":")
 
@@ -129,6 +137,8 @@ def authenticate(headers):
         return False
     except Exception as e:
         return False
+
+
 def extractHeader(request_data):
     request_lines = request_data.split("\r\n")
     headers = {}
@@ -137,13 +147,15 @@ def extractHeader(request_data):
             key, value = line.split(":", 1)  # Split at the first occurrence of ":"
             headers[key.strip()] = value.strip()
     return headers
+
+
 def handle_client_request(client_socket):
     # Receive data from the client
     request_data = client_socket.recv(1024).decode("utf-8")
     print(request_data)
 
     authenticated = authenticate(extractHeader(request_data))
-    if(authenticated == False):
+    if (authenticated == False):
         error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
         client_socket.sendall(error_response.encode('utf-8'))
@@ -155,16 +167,12 @@ def handle_client_request(client_socket):
     print(request_line.split(" "))
     method, url, _ = request_line.split(" ")
 
-
-
-
-
     # Implement logic based on the HTTP method
     if method == "GET":
 
         path = current_directory + url;
         # if url == "/":
-               # Using a raw string
+        # Using a raw string
         files = get_file_list(path)
 
         # Render the HTML template with the file data
