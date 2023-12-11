@@ -4,7 +4,7 @@ import os
 from urllib.parse import parse_qs, urlparse
 import hashlib
 from datetime import datetime
-account = {'client1': '123','12110104':'123456'}
+account = {'client1': '123'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
 
