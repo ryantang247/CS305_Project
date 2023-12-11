@@ -2,8 +2,9 @@ import socket
 import base64
 import os
 from urllib.parse import parse_qs, urlparse
-
-account = {'client1': '123'}
+import hashlib
+from datetime import datetime
+account = {'client1': '123','12110104':'123456'}
 HOST = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
 
@@ -99,9 +100,26 @@ def get_file_list(directory_path):
         print(f"Error while getting file list: {e}")
         return []
 
+session_storage = {}
+def handle_login(username, password):
+    # Validate username and password (your authentication logic)
+    # If login successful:
+    print("get here",username, password )
+    session_id = generate_unique_session_id(username)  # Generate a unique session ID
+    session_storage[username] = session_id  # Store session ID for the user
+    return session_id
 
-# def authentication():
+def generate_unique_session_id(username):
 
+    current_time = datetime.now().isoformat()  # Get current time as string
+    # Concatenate username and current time for uniqueness
+
+    data = f"{username}-{current_time}"
+
+    # Use hashlib to hash the data (you can choose any hashing algorithm)
+    hashed_data = hashlib.sha256(data.encode()).hexdigest()
+
+    return hashed_data[:10]
 
 def generate_html(file_list):
     html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
@@ -130,7 +148,9 @@ def authenticate(headers):
 
             # Check if the username exists in the account dictionary
             if username in account and account[username] == password:
-                return True
+                session_id = handle_login(username, password)
+                print(session_id)
+                return True, session_id,username
             else:
                 return False
 
@@ -154,18 +174,52 @@ def extractHeader(request_data):
     return headers
 
 
-
+def get_key_from_value(dictionary, search_value):
+    for key, value in dictionary.items():
+        if value == search_value:
+            return key
+    return None
 def handle_client_request(client_socket):
     # Receive data from the client
+    # while True:
+    username = None
+    session_id = None
     request_data = client_socket.recv(1024).decode("utf-8")
+    authenticated = None
     print(request_data)
+    try:
+        print('cookie',extractHeader(request_data)['Cookie'])
+        if (extractHeader(request_data)['Cookie']):
+            username = get_key_from_value(session_storage, extractHeader(request_data)['Cookie'])
+            if(username == None):
+                authenticated = authenticate(extractHeader(request_data))
+                if (authenticated == False):
+                    error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
-    authenticated = authenticate(extractHeader(request_data))
-    if (authenticated == False):
-        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+                    client_socket.sendall(error_response.encode('utf-8'))
+                    return
+                session_id = authenticated[1]
+                username = authenticated[2]
+        else:
+            print("user not yet auth")
+            authenticated = authenticate(extractHeader(request_data))
+            if (authenticated == False):
+                error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
+                client_socket.sendall(error_response.encode('utf-8'))
+                return
+            session_id = authenticated[1]
+            username = authenticated[2]
+    except Exception as e:
+        print("exception on auth",e)
+        authenticated = authenticate(extractHeader(request_data))
+        if (authenticated == False):
+            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
+        session_id = authenticated[1]
+        username = authenticated[2]
     # Parse HTTP request
     request_lines = request_data.split("\r\n")
 
@@ -221,7 +275,9 @@ def handle_client_request(client_socket):
 
                 "Content-Type": "application/octet-stream",  # Modify as per your file type
 
-                "Connection": "keep-alive"
+                "Connection": "keep-alive",
+
+                "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
 
             }
 
@@ -343,101 +399,107 @@ def handle_client_request(client_socket):
         # Return 405 Method Not Allowed for other methods
         error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
         client_socket.sendall(error_response.encode('utf-8'))
+        # print(extractHeader(request_data))
+        # if 'Connection' in extractHeader(request_data):
+        #
+        #     connection_header = headers['Connection'].lower()
+        #     if connection_header == 'close':
+        #         print("close")
 
 
-def upload(client_socket, url, received_data, headers):
-    # Extract query parameters
-    query_params = {}
-    if "?" in url:
-        path_param = url.split("?")[1]
-        path_param = path_param.split("&")
-        for param in path_param:
-            key, value = param.split("=")
-            query_params[key] = value
+    def upload(client_socket, url, received_data, headers):
+        # Extract query parameters
+        query_params = {}
+        if "?" in url:
+            path_param = url.split("?")[1]
+            path_param = path_param.split("&")
+            for param in path_param:
+                key, value = param.split("=")
+                query_params[key] = value
 
-    # Check for the "path" parameter in the query
-    upload_path = query_params.get('path')
-    if not upload_path:
-        error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
-
-    # Check if the target directory exists
-    target_directory = os.path.join(os.getcwd(), "data", upload_path)
-    if not os.path.exists(target_directory):
-        error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
-
-    # Check if the user has permission to upload in the target directory
-    auth_header = headers.get("Authorization")
-    if auth_header and auth_header.startswith("Basic "):
-        credentials_base64 = auth_header.split(" ")[1]
-        credentials = base64.b64decode(credentials_base64).decode('utf-8')
-        username, _ = credentials.split(":")
-
-        if username == "11912113" and upload_path.startswith(username):
-            # Save the uploaded file in the target directory
-            file_path = os.path.join(target_directory, os.path.basename(url[1:]))
-            with open(file_path, 'wb') as file:
-                file.write(received_data)
-
-            # Respond with a success message
-            success_response = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
-            client_socket.sendall(success_response.encode('utf-8'))
-        else:
-            error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to upload to this directory"
+        # Check for the "path" parameter in the query
+        upload_path = query_params.get('path')
+        if not upload_path:
+            error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
             client_socket.sendall(error_response.encode('utf-8'))
-    else:
-        # Authorization header not provided
-        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
-        client_socket.sendall(error_response.encode('utf-8'))
+            return
 
-
-def delete(client_socket, url, received_data, headers):
-    # Extract query parameters
-    query_params = {}
-    if "?" in url:
-        path_param = url.split("?")[1]
-        path_param = path_param.split("&")
-        for param in path_param:
-            key, value = param.split("=")
-            query_params[key] = value
-
-    # Check for the "path" parameter in the query
-    delete_path = query_params.get('path')
-    if not delete_path:
-        error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
-
-    # Check if the target file exists
-    target_file = os.path.join(os.getcwd(), "data", delete_path)
-    if not os.path.exists(target_file):
-        error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget file does not exist"
-        client_socket.sendall(error_response.encode('utf-8'))
-        return
-
-    # Check if the user has permission to delete the target file
-    auth_header = headers.get("Authorization")
-    if auth_header and auth_header.startswith("Basic "):
-        credentials_base64 = auth_header.split(" ")[1]
-        credentials = base64.b64decode(credentials_base64).decode('utf-8')
-        username, _ = credentials.split(":")
-
-        if username == "11912113" and delete_path.startswith(username):
-            # Ensure that the file is under the user's directory
-            os.remove(target_file)
-            # Respond with a success message
-            success_response = "HTTP/1.1 200 OK\r\n\r\nFile deleted successfully"
-            client_socket.sendall(success_response.encode('utf-8'))
-        else:
-            error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to delete this file"
+        # Check if the target directory exists
+        target_directory = os.path.join(os.getcwd(), "data", upload_path)
+        if not os.path.exists(target_directory):
+            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
             client_socket.sendall(error_response.encode('utf-8'))
-    else:
-        # Authorization header not provided
-        error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
-        client_socket.sendall(error_response.encode('utf-8'))
+            return
+
+        # Check if the user has permission to upload in the target directory
+        auth_header = headers.get("Authorization")
+        if auth_header and auth_header.startswith("Basic "):
+            credentials_base64 = auth_header.split(" ")[1]
+            credentials = base64.b64decode(credentials_base64).decode('utf-8')
+            username, _ = credentials.split(":")
+
+            if username == "11912113" and upload_path.startswith(username):
+                # Save the uploaded file in the target directory
+                file_path = os.path.join(target_directory, os.path.basename(url[1:]))
+                with open(file_path, 'wb') as file:
+                    file.write(received_data)
+
+                # Respond with a success message
+                success_response = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
+                client_socket.sendall(success_response.encode('utf-8'))
+            else:
+                error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to upload to this directory"
+                client_socket.sendall(error_response.encode('utf-8'))
+        else:
+            # Authorization header not provided
+            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
+            client_socket.sendall(error_response.encode('utf-8'))
+
+
+    def delete(client_socket, url, received_data, headers):
+        # Extract query parameters
+        query_params = {}
+        if "?" in url:
+            path_param = url.split("?")[1]
+            path_param = path_param.split("&")
+            for param in path_param:
+                key, value = param.split("=")
+                query_params[key] = value
+
+        # Check for the "path" parameter in the query
+        delete_path = query_params.get('path')
+        if not delete_path:
+            error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
+
+        # Check if the target file exists
+        target_file = os.path.join(os.getcwd(), "data", delete_path)
+        if not os.path.exists(target_file):
+            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget file does not exist"
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
+
+        # Check if the user has permission to delete the target file
+        auth_header = headers.get("Authorization")
+        if auth_header and auth_header.startswith("Basic "):
+            credentials_base64 = auth_header.split(" ")[1]
+            credentials = base64.b64decode(credentials_base64).decode('utf-8')
+            username, _ = credentials.split(":")
+
+            if username == "11912113" and delete_path.startswith(username):
+                # Ensure that the file is under the user's directory
+                os.remove(target_file)
+                # Respond with a success message
+                success_response = "HTTP/1.1 200 OK\r\n\r\nFile deleted successfully"
+                client_socket.sendall(success_response.encode('utf-8'))
+            else:
+                error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to delete this file"
+                client_socket.sendall(error_response.encode('utf-8'))
+        else:
+            # Authorization header not provided
+            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nAuthorization Required"
+            client_socket.sendall(error_response.encode('utf-8'))
 
 
 while True:
