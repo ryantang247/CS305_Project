@@ -144,9 +144,14 @@ def extractHeader(request_data):
     headers = {}
     for line in request_lines[1:]:
         if line:
-            key, value = line.split(":", 1)  # Split at the first occurrence of ":"
-            headers[key.strip()] = value.strip()
+            parts = line.split(":", 1)  # Split at the first occurrence of ":"
+            if len(parts) == 2:
+                key, value = parts
+                headers[key.strip()] = value.strip()
+            else:
+                print(f"Ignoring invalid header line: {line}")
     return headers
+
 
 
 def handle_client_request(client_socket):
@@ -170,7 +175,7 @@ def handle_client_request(client_socket):
     # Implement logic based on the HTTP method
     if method == "GET":
 
-        path = current_directory + url;
+        path = current_directory + url
         # if url == "/":
         # Using a raw string
         files = get_file_list(path)
@@ -292,9 +297,7 @@ def handle_client_request(client_socket):
                     headers = {
                         "Content-Length": str(len(response_body)),
                         "Content-Type": "text/plain",
-
                         "Connection": "keep-alive"
-
                     }
                     response_status_line = "HTTP/1.1 200 OK\r\n"
 
@@ -309,11 +312,13 @@ def handle_client_request(client_socket):
                     # Send the response status line, headers, and response body
                     client_socket.sendall((response_status_line + response_header + response_body).encode('utf-8'))
 
-                    # Upload Method
-                    upload(client_socket=client_socket, url=url, received_data=received_data)
+                    if process_url(url=url) == 'upload':
+                        # Upload Method
+                        upload(client_socket=client_socket, url=url, received_data=received_data, headers=headers)
 
-                    # Delete Method
-                    delete(client_socket=client_socket, url=url, received_data=received_data)
+                    elif process_url(url=url) == 'delete':
+                        # Delete Method
+                        delete(client_socket=client_socket, url=url, received_data=received_data, headers=headers)
 
 
                 else:
@@ -339,7 +344,7 @@ def handle_client_request(client_socket):
         client_socket.sendall(error_response.encode('utf-8'))
 
 
-def upload(client_socket, url, received_data):
+def upload(client_socket, url, received_data, headers):
     # Extract query parameters
     query_params = {}
     if "?" in url:
@@ -388,7 +393,7 @@ def upload(client_socket, url, received_data):
         client_socket.sendall(error_response.encode('utf-8'))
 
 
-def delete(client_socket, url, received_data):
+def delete(client_socket, url, received_data, headers):
     # Extract query parameters
     query_params = {}
     if "?" in url:
