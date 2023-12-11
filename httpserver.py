@@ -25,6 +25,7 @@ def get_file_list(directory_path):
         print(f"Error while getting file list: {e}")
         return []
 
+
 def generate_html(file_list):
     html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
     html_content += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n"
@@ -37,6 +38,7 @@ def generate_html(file_list):
     html_content += "</ul>\n</body>\n</html>"
 
     return html_content
+
 
 def handle_client_request(client_socket):
     # Receive data from the client
@@ -51,33 +53,35 @@ def handle_client_request(client_socket):
 
     # Implement logic based on the HTTP method
     if method == "GET":
-        if url == "/":
-            directory_path = r"C:\Users\Asus\Desktop\Computer Networks\CS305_Project\CS305_Project"  # Using a raw string
-            files = get_file_list(directory_path)
+        try:
+            if url == "/":
+                directory_path = r"C:\Users\Asus\Desktop\Computer Networks\CS305_Project\CS305_Project"  # Using a raw string
+                files = get_file_list(directory_path)
 
-            # Render the HTML template with the file data
-            html_content = generate_html(files)
+                # Render the HTML template with the file data
+                html_content = generate_html(files)
 
-            # Send the HTML content as the response
-            headers = {
-                "Content-Length": str(len(html_content)),
-                "Content-Type": "text/html",
-                "Connection": "close"
-            }
-            response_status_line = "HTTP/1.1 200 OK\r\n"
-            response_header = ""
-            for header, value in headers.items():
-                response_header += f"{header}: {value}\r\n"
-            response_header += "\r\n"
+                # Send the HTML content as the response
+                headers = {
+                    "Content-Length": str(len(html_content)),
+                    "Content-Type": "text/html",
+                    "Connection": "close"
+                }
+                response_status_line = "HTTP/1.1 200 OK\r\n"
+                response_header = ""
+                for header, value in headers.items():
+                    response_header += f"{header}: {value}\r\n"
+                response_header += "\r\n"
 
-            # Send the response status line, headers, and HTML content
-            client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-            client_socket.sendall(html_content.encode('utf-8'))
-        elif url.startswith("/files"):
-            handle_file_request(client_socket, url)
-        else:
-            error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-            client_socket.sendall(error_response.encode('utf-8'))
+                # Send the response status line, headers, and HTML content
+                client_socket.sendall((response_status_line + response_header).encode('utf-8'))
+                client_socket.sendall(html_content.encode('utf-8'))
+            elif url.startswith("/files"):
+                handle_file_request(client_socket, url)
+            else:
+                error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
+                client_socket.sendall(error_response.encode('utf-8'))
+
         except Exception as e:
             error_message = f"An error occurred: {str(e)}"
             error_response = f"HTTP/1.1 500 Internal Server Error\r\n\r\n{error_message}"
@@ -353,8 +357,6 @@ def upload(client_socket, url, received_data):
         client_socket.sendall(error_response.encode('utf-8'))
 
 
-
-
 def delete(client_socket, url, received_data):
     # Extract query parameters
     query_params = {}
@@ -405,5 +407,3 @@ while True:
     client_socket, client_address = server_socket.accept()
     handle_client_request(client_socket)
     client_socket.close()
-
-
