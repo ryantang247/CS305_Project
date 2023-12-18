@@ -1,8 +1,7 @@
-import cgi
 import socket
 import base64
 import os
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse, parse_qs, unquote
 import hashlib
 from datetime import datetime
 
@@ -356,62 +355,35 @@ def handle_client_request(client_socket):
 
             # Check for Authorization header
 
-            auth_header = _headers.get("Authorization")
-            if auth_header and auth_header.startswith("Basic "):
-                # Extract credentials and decode base64
-                credentials_base64 = auth_header.split(" ")[1]
-                credentials = base64.b64decode(credentials_base64).decode('utf-8')
-                username, _ = credentials.split(":")
 
-                # Now credentials will be in the format 'username:password'
+            response_body = "Data received successfully"
+            headers = {
+                "Content-Length": str(len(response_body)),
+                "Content-Type": "text/plain",
+                "Content-Disposition": _headers.get("Content-Disposition"),
+                "Connection": "keep-alive"
+            }
+            response_status_line = None
 
-                # Verify credentials (this is a placeholder, replace it with your authentication logic)
-                expected_credentials = "client1:123"  # Placeholder for expected credentials
+            # Construct the response header
+            response_header = ""
+            for header, value in headers.items():
+                response_header += f"{header}: {value}\r\n"
 
-                if credentials == expected_credentials:
-                    # Process the received data (this is a placeholder, replace it with your processing logic)
-                    # For example, if the data is a file being uploaded, you can save it on the server
-                    # Replace this logic with what suits your application
-                    # For demonstration purposes, let's print the received data
-                    print("Received data:", received_data.decode('utf-8'))
+            # Append an empty line to indicate the end of headers
+            response_header += "\r\n"
 
-                    # Construct headers and status code for the response
-                    # Here, it just sends a simple success message as a response body
-                    response_body = "Data received successfully"
-                    headers = {
-                        "Content-Length": str(len(response_body)),
-                        "Content-Type": "text/plain",
-                        "Connection": "keep-alive"
-                    }
-                    response_status_line = "HTTP/1.1 200 OK\r\n"
+            # Send the response status line, headers, and response body
+            # client_socket.sendall((response_status_line + response_header + response_body).encode('utf-8'))
+            # print(process_url(url))
+            if process_url(url=url) == 'upload':
+                # Upload Method
+                upload(client_socket=client_socket, url=url, received_data=received_data, username=username,
+                       headers=headers, response_status_line=response_status_line)
 
-                    # Construct the response header
-                    response_header = ""
-                    for header, value in headers.items():
-                        response_header += f"{header}: {value}\r\n"
-
-                    # Append an empty line to indicate the end of headers
-                    response_header += "\r\n"
-
-                    # Send the response status line, headers, and response body
-                    client_socket.sendall((response_status_line + response_header + response_body).encode('utf-8'))
-                    print(process_url(url))
-                    if process_url(url=url) == 'upload':
-                        # Upload Method
-                        upload(client_socket=client_socket, url=url, received_data=received_data, username=username,
-                               headers=headers)
-
-                    elif process_url(url=url) == 'delete':
-                        # Delete Method
-                        delete(client_socket=client_socket, url=url, received_data=received_data, username=username)
-
-
-                else:
-                    # Unauthorized - incorrect credentials
-                    error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-                    client_socket.sendall(error_response.encode('utf-8'))
-
-                    return  # Exit without processing further if unauthorized
+            elif process_url(url=url) == 'delete':
+                # Delete Method
+                delete(client_socket=client_socket, url=url, received_data=received_data, username=username)
 
             else:
                 # Authorization header not provided
@@ -436,58 +408,72 @@ def handle_client_request(client_socket):
         #         print("close")
 
 
-def upload(client_socket, url, received_data, username, headers):
-    # Check if the method is 'upload'
-    if process_url(url=url) == 'upload':
-        # Extract query parameters using parse_qs
-        query_params = parse_qs(urlparse(url).query)
-        # print("****** Query Params: ", query_params)
+def process_path(raw_path):
+    # Unquote the path to handle percent-encoded characters
+    unquoted_path = unquote(raw_path)
 
-        # Check for the "path" parameter in the query
-        upload_path = query_params.get('path', [''])[0]
-        if not upload_path:
-            error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
-            client_socket.sendall(error_response.encode('utf-8'))
-            return
+    # Remove leading and trailing slashes
+    processed_path = unquoted_path.strip('/')
 
-        # Check if the target directory exists
-        target_directory = os.path.join(os.getcwd(), "data", upload_path)
-        if not os.path.exists(target_directory):
-            error_response = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
-            client_socket.sendall(error_response.encode('utf-8'))
-            return
+    return processed_path
 
-        if upload_path.startswith(username):
-            # Extract the filename from the Content-Disposition header, if available
-            content_disposition = headers.get("Content-Disposition")
-            if content_disposition:
-                # Manual parsing of Content-Disposition header
-                _, params = content_disposition.split(";")
-                filename_param = [param.strip() for param in params.split("=")]
-                if filename_param[0].lower() == "filename" and len(filename_param) == 2:
-                    filename = filename_param[1].strip("\"'")
-                    file_path = os.path.join(target_directory, filename)
-                    with open(file_path, 'wb') as file:
-                        file.write(received_data)
 
-                    # Respond with a success message
-                    success_response = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
-                    client_socket.sendall(success_response.encode('utf-8'))
-                else:
-                    error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'filename' in Content-Disposition header"
-                    client_socket.sendall(error_response.encode('utf-8'))
+def upload(client_socket, url, received_data, username, headers, response_status_line):
+
+    # Extract query parameters using parse_qs
+    query_params = parse_qs(urlparse(url).query)
+    # print("****** Query Params: ", query_params)
+
+    # Check for the "path" parameter in the query
+    upload_path = query_params.get('path', [''])[0]
+    if not upload_path:
+        response_status_line = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
+        client_socket.sendall(response_status_line.encode('utf-8'))
+        return
+
+    # Process the path using the new function
+    upload_path = process_path(upload_path)
+
+    # Check if the target directory exists
+    target_directory = os.path.join(os.getcwd(), "data", upload_path)
+    if not os.path.exists(target_directory):
+        response_status_line = "HTTP/1.1 404 Not Found\r\n\r\nTarget directory does not exist"
+        client_socket.sendall(response_status_line.encode('utf-8'))
+        return
+
+    if upload_path == username:
+        # Extract the filename from the Content-Disposition header, if available
+        content_disposition = headers.get("Content-Disposition")
+        if content_disposition:
+            # Manual parsing of Content-Disposition header
+            params = [param.strip() for param in content_disposition.split(";")]
+            filename_param = next((param for param in params if param.lower().startswith("filename")), None)
+
+            if filename_param:
+                _, filename = filename_param.split("=")
+                filename = filename.strip("\"")
+                filename = filename.strip("\'")
+                file_path = os.path.join(target_directory, filename)
+                with open(file_path, 'wb') as file:
+                    file.write(received_data)
+
+                # Respond with a success message
+                response_status_line = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
+                client_socket.sendall(response_status_line.encode('utf-8'))
             else:
-                # Content-Disposition header not provided
-                error_response = "HTTP/1.1 400 Bad Request\r\n\r\nContent-Disposition header missing"
-                client_socket.sendall(error_response.encode('utf-8'))
+                response_status_line = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'filename' in Content-Disposition header"
+                client_socket.sendall(response_status_line.encode('utf-8'))
         else:
-            error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to upload to this directory"
-            client_socket.sendall(error_response.encode('utf-8'))
-
+            # Content-Disposition header not provided
+            response_status_line = "HTTP/1.1 400 Bad Request\r\n\r\nContent-Disposition header missing"
+            client_socket.sendall(response_status_line.encode('utf-8'))
     else:
-        # If the method is not 'upload', return a 405 Method Not Allowed response
-        error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method with 'upload' URL is allowed for file upload"
-        client_socket.sendall(error_response.encode('utf-8'))
+        response_status_line = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to upload to this directory"
+        client_socket.sendall(response_status_line.encode('utf-8'))
+
+
+
+
 
 
 def delete(client_socket, url, received_data, username):
@@ -501,6 +487,9 @@ def delete(client_socket, url, received_data, username):
         error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
         client_socket.sendall(error_response.encode('utf-8'))
         return
+
+    # Process the path using the new function
+    delete_path = process_path(delete_path)
 
     # Check if the target file exists
     target_file = os.path.join(os.getcwd(), "data", delete_path)
@@ -519,6 +508,7 @@ def delete(client_socket, url, received_data, username):
     else:
         error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to delete this file"
         client_socket.sendall(error_response.encode('utf-8'))
+
 
 
 while True:
