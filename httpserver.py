@@ -5,8 +5,8 @@ from urllib.parse import urlparse, parse_qs, unquote
 import hashlib
 from datetime import datetime
 import threading
-account = {'client1': '123','client2': '123','client3': '123'}
 
+account = {'client1': '123', 'client2': '123', 'client3': '123'}
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
@@ -147,7 +147,7 @@ def authenticate(headers):
             # Check if the username exists in the account dictionary
             if username in account and account[username] == password:
                 session_id = handle_login(username, password)
-                return True, session_id,username
+                return True, session_id, username
             else:
                 return False
 
@@ -353,7 +353,6 @@ def handle_client_request(client_socket):
 
             # Check for Authorization header
 
-
             response_body = "Data received successfully"
             headers = {
                 "Content-Length": str(len(response_body)),
@@ -377,7 +376,7 @@ def handle_client_request(client_socket):
             if process_url(url=url) == 'upload':
                 # Upload Method
                 upload(client_socket=client_socket, url=url, received_data=received_data, username=username,
-                       headers=headers, response_status_line=response_status_line)
+                       headers=headers)
 
             elif process_url(url=url) == 'delete':
                 # Delete Method
@@ -406,12 +405,22 @@ def handle_client_request(client_socket):
         #         print("close")
 
 
+def process_path(raw_path):
+    # Unquote the path to handle percent-encoded characters
+    unquoted_path = unquote(raw_path)
+
+    # Remove leading and trailing slashes
+    processed_path = unquoted_path.strip('/')
+
+    return processed_path
+
+
 def upload(client_socket, url, received_data, username, headers):
     # Check if the method is 'upload'
-    if process_url(url=url) == 'upload':
-        # Extract query parameters using parse_qs
-        query_params = parse_qs(urlparse(url).query)
-        # print("****** Query Params: ", query_params)
+
+    # Extract query parameters using parse_qs
+    query_params = parse_qs(urlparse(url).query)
+    # print("****** Query Params: ", query_params)
 
     # Check for the "path" parameter in the query
     upload_path = query_params.get('path', [''])[0]
@@ -461,10 +470,6 @@ def upload(client_socket, url, received_data, username, headers):
         client_socket.sendall(response_status_line.encode('utf-8'))
 
 
-
-
-
-
 def delete(client_socket, url, received_data, username):
     # Extract query parameters using parse_qs
     query_params = parse_qs(urlparse(url).query)
@@ -498,10 +503,13 @@ def delete(client_socket, url, received_data, username):
         error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to delete this file"
         client_socket.sendall(error_response.encode('utf-8'))
 
+
 SERVER = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
- # Listen for incoming connections, queue up to 5 requests
+# Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
+
+
 def client_thread(conn, addr):
     with conn:
         print(f"[CONNECTION] Connected to {addr}")
@@ -513,6 +521,7 @@ def client_thread(conn, addr):
 
     print(f"[CONNECTION] Disconnected from {addr}")
 
+
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.bind((SERVER, PORT))
     s.listen(5)
@@ -523,4 +532,3 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print(f"[INFO] Starting thread for connection {addr}")
         thread = threading.Thread(target=client_thread, args=(conn, addr))
         thread.start()
-
