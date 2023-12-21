@@ -208,6 +208,7 @@ def handle_client_request(client_socket):
     #     incr = incr + 1
     #     print("haha",incr)
     #     print(client_socket)
+    detectedClose = False
     username = None
     session_id = None
     request_data = client_socket.recv(1024).decode("utf-8")
@@ -215,6 +216,8 @@ def handle_client_request(client_socket):
         return "Bye"
     authenticated = None
     print(request_data)
+    if extractHeader(request_data)['Connection'].lower() == 'close':
+        detectedClose = True
     try:
         print('cookie', extractHeader(request_data)['Cookie'])
         if extractHeader(request_data)['Cookie']:
@@ -404,6 +407,9 @@ def handle_client_request(client_socket):
         #     if connection_header == 'close':
         #         print("close")
 
+    if detectedClose:
+      
+        return "Bye"
 
 def process_path(raw_path):
     # Unquote the path to handle percent-encoded characters
