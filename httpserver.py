@@ -522,7 +522,7 @@ def client_thread(conn, addr):
         while True:
 
             data = handle_client_request(conn)
-            if data == "Bye":
+            if data == "Bye" or data == None:
                 break
 
     print(f"[CONNECTION] Disconnected from {addr}")
