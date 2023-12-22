@@ -340,8 +340,8 @@ def handle_client_request(client_socket):
                 for i in range(0, len(content), 1024):  # You can adjust the chunk size
                     send_chunked_data(client_socket, content[i:i + 1024])
 
-                # ignore the last chunked data and see
-                # send_chunked_data(client_socket, "")  # Send the final empty chunk
+                closing_header = "0\r\n\r\n"
+                client_socket.sendall(closing_header.encode('utf-8'))
 
             else:
                 send_404(client_socket)
