@@ -15,8 +15,6 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 print(f"The directory of the current file is: {current_directory}")
 
 
-
-
 def process_url(url):
     # Parse the URL
     parsed_url = urlparse(url)
@@ -632,6 +630,7 @@ def send_404(client_socket):
 
     client_socket.sendall((response_header + response_body).encode('utf-8'))
 
+
 def send_400(client_socket):
     response_body = 'Bad Request'
     headers = {
@@ -648,6 +647,7 @@ def send_400(client_socket):
     response_header += "\r\n"
 
     client_socket.sendall((response_header + response_body).encode('utf-8'))
+
 
 SERVER = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
