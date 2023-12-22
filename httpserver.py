@@ -241,7 +241,7 @@ def handle_client_request(client_socket):
     except Exception as e:
         print("exception on auth", e)
         authenticated = authenticate(extractHeader(request_data))
-        if (authenticated == False):
+        if not authenticated:
             error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
             client_socket.sendall(error_response.encode('utf-8'))
@@ -416,8 +416,6 @@ def process_path(raw_path):
 
 
 def upload(client_socket, url, received_data, username, headers):
-    # Check if the method is 'upload'
-
     # Extract query parameters using parse_qs
     query_params = parse_qs(urlparse(url).query)
     # print("****** Query Params: ", query_params)
