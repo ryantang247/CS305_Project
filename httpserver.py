@@ -6,11 +6,15 @@ import hashlib
 from datetime import datetime
 import threading
 
+from urlparser import UrlParser
+
 account = {'client1': '123', 'client2': '123', 'client3': '123'}
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
 print(f"The directory of the current file is: {current_directory}")
+
+
 
 
 def process_url(url):
@@ -135,7 +139,7 @@ def generate_html(file_list):
 
 def authenticate(headers):
     try:
-        auth_header = headers.get("Authorization")
+        auth_header = headers.get("Authorization") or headers.get("authorization")
 
         if auth_header and auth_header.startswith("Basic "):
             encoded_credentials = auth_header.split(" ")[1]
@@ -210,7 +214,7 @@ def handle_client_request(client_socket):
     #     print(client_socket)
     username = None
     session_id = None
-    request_data = client_socket.recv(1024).decode("utf-8")
+    request_data = client_socket.recv(2048).decode("utf-8")
     if not request_data:
         return "Bye"
     authenticated = None
@@ -258,36 +262,145 @@ def handle_client_request(client_socket):
     # Implement logic based on the HTTP method
     if method == "GET":
 
-        path = current_directory + url
-        # if url == "/":
-        # Using a raw string
-        files = get_file_list(path)
+        req_type = UrlParser.process_url(url)
+        formatted_url = url.lstrip('/').replace('/', os.path.sep)
+        if req_type == 'download':
+            # Send the HTML content as the response
 
-        # Render the HTML template with the file data
-        html_content = generate_html(files)
+            file_path = os.path.join(current_directory, "data", formatted_url)
 
-        # Send the HTML content as the response
-        headers = {
-            "Content-Length": str(len(html_content)),
-            "Content-Type": "text/html",
-            "Connection": "keep-alive"
-        }
-        response_status_line = "HTTP/1.1 200 OK\r\n"
-        response_header = ""
-        for header, value in headers.items():
-            response_header += f"{header}: {value}\r\n"
-        response_header += "\r\n"
+            # Open the file in binary mode
+            if os.path.exists(file_path) and os.path.isfile(file_path):
+                with open(file_path, 'rb') as file:
+                    file_content = file.read()
+                    content_length = len(file_content)
+                    content_type = "application/octet-stream"  # Adjust content type based on the file
 
-        # Send the response status line, headers, and HTML content
-        client_socket.sendall((response_status_line + response_header).encode('utf-8'))
-        client_socket.sendall(html_content.encode('utf-8'))
-        # elif url.startswith("/files"):
-        #     handle_file_request(client_socket, url)
-        # else:
-        #     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-        #     client_socket.sendall(error_response.encode('utf-8'))
+                    # Construct headers
+                    headers = {
+                        "Content-Length": str(content_length),
+                        "Content-Type": content_type,
+                        "Connection": "close"
+                    }
 
-    if method == "HEAD":
+                    # Construct the response status line
+                    response_status_line = "HTTP/1.1 200 OK\r\n"
+
+                    # Construct the response header
+                    response_header = ""
+                    for header, value in headers.items():
+                        response_header += f"{header}: {value}\r\n"
+
+                    # Append an empty line to indicate the end of headers
+                    response_header += "\r\n"
+
+                    # Send the response status line and headers
+                    client_socket.sendall((response_status_line + response_header).encode('utf-8'))
+
+                    # Send the file content
+                    client_socket.sendall(file_content)
+            else:
+                # If the file is not found, send a 404 response
+                send_404(client_socket)
+
+        elif req_type == 'chunktrans':
+
+            # convert it to OS format
+            url_without_param = UrlParser.parse_qs(url)['path'].lstrip('/').replace('/', os.path.sep)
+            file_path = os.path.join(current_directory, "data", url_without_param)
+
+            def send_chunked_data(client_socket, data):
+                chunk = f"{len(data):X}\r\n{data.decode('utf-8')}\r\n"
+                client_socket.sendall(chunk.encode('utf-8'))
+
+            # Check if the file exists
+            if os.path.exists(file_path):
+
+                # Open and read the file content
+                with open(file_path, 'rb') as file:
+                    content = file.read()
+
+                # Send the response headers
+                headers = {
+                    "HTTP/1.1": "200 OK",
+                    "Transfer-Encoding": "chunked",
+                    "Content-Type": "application/octet-stream",
+                    "Connection": "open",
+                }
+                response_header = ""
+                for header, value in headers.items():
+                    response_header += f"{header}: {value}\r\n"
+
+                # Append an empty line to indicate the end of headers
+                response_header += "\r\n"
+                client_socket.sendall(response_header.encode('utf-8'))
+
+                # Send the file content, in chunks
+
+                for i in range(0, len(content), 1024):  # You can adjust the chunk size
+                    send_chunked_data(client_socket, content[i:i + 1024])
+
+                # ignore the last chunked data and see
+                # send_chunked_data(client_socket, "")  # Send the final empty chunk
+
+            else:
+                send_404(client_socket)
+        elif req_type == "view":
+
+            url_parts = url.split('/')
+
+            # Get the second part of the URL
+            second_part = url_parts[1]
+            path = os.path.join(current_directory, "data", second_part)
+            files = get_file_list(path)
+
+            # Render the HTML template with the file data
+            html_content = generate_html(files)
+            headers = {
+                "Content-Length": str(len(html_content)),
+                "Content-Type": "text/html",
+                "Connection": "keep-alive"
+            }
+            response_status_line = "HTTP/1.1 200 OK\r\n"
+            response_header = ""
+            for header, value in headers.items():
+                response_header += f"{header}: {value}\r\n"
+            response_header += "\r\n"
+
+            # Send the response status line, headers, and HTML content
+            client_socket.sendall((response_status_line + response_header).encode('utf-8'))
+            client_socket.sendall(html_content.encode('utf-8'))
+
+        elif req_type == "home_page":
+            path = os.path.join(current_directory, "login.html")
+            with open(path, 'rb') as file:
+                file_content = file.read()
+                headers = {
+                    "HTTP/1.1": "200 OK",
+                    "Content-Length": str(len(file_content)),
+                    "Content-Type": "text/html",  # Set the appropriate content type for HTML
+                    "Connection": "open",
+                }
+
+                response_header = ""
+                for header, value in headers.items():
+                    response_header += f"{header}: {value}\r\n"
+
+                # Append an empty line to indicate the end of headers
+                response_header += "\r\n"
+
+                # Send the response header
+                client_socket.sendall(response_header.encode('utf-8'))
+
+                # Send the entire file content
+                client_socket.sendall(file_content)
+
+        elif req_type == "unknown":
+            send_400(client_socket)
+        else:
+            send_400(client_socket)
+
+    elif method == "HEAD":
 
         path = current_directory + url
 
@@ -395,7 +508,7 @@ def handle_client_request(client_socket):
 
     else:
         # Return 405 Method Not Allowed for other methods
-        error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
+        error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nIncorrect method used"
         client_socket.sendall(error_response.encode('utf-8'))
         # print(extractHeader(request_data))
         # if 'Connection' in extractHeader(request_data):
@@ -502,6 +615,40 @@ def delete(client_socket, url, received_data, username):
         client_socket.sendall(error_response.encode('utf-8'))
 
 
+def send_404(client_socket):
+    response_body = 'File not found'
+    headers = {
+        "HTTP/1.1": "404 NOT FOUND",
+        "Content-Length": len(response_body),
+        "Content-Type": "text/plain",
+        "Connection": "close",
+    }
+    response_header = ""
+    for header, value in headers.items():
+        response_header += f"{header} {value}\r\n"
+
+    # Append an empty line to indicate the end of headers
+    response_header += "\r\n"
+
+    client_socket.sendall((response_header + response_body).encode('utf-8'))
+
+def send_400(client_socket):
+    response_body = 'Bad Request'
+    headers = {
+        "HTTP/1.1": "400 BAD REQUEST",
+        "Content-Length": len(response_body),
+        "Content-Type": "text/plain",
+        "Connection": "close",
+    }
+    response_header = ""
+    for header, value in headers.items():
+        response_header += f"{header} {value}\r\n"
+
+    # Append an empty line to indicate the end of headers
+    response_header += "\r\n"
+
+    client_socket.sendall((response_header + response_body).encode('utf-8'))
+
 SERVER = '127.0.0.1'  # localhost
 PORT = 8080  # Use a port number
 # Listen for incoming connections, queue up to 5 requests
@@ -514,7 +661,7 @@ def client_thread(conn, addr):
         while True:
 
             data = handle_client_request(conn)
-            if data == "Bye":
+            if data == "Bye" or data == None:
                 break
 
     print(f"[CONNECTION] Disconnected from {addr}")
