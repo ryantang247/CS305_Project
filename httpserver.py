@@ -273,7 +273,8 @@ def handle_client_request(client_socket):
         headers = {
             "Content-Length": str(len(html_content)),
             "Content-Type": "text/html",
-            "Connection": "keep-alive"
+            "Connection": "keep-alive",
+            "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
         }
         response_status_line = "HTTP/1.1 200 OK\r\n"
         response_header = ""
@@ -361,7 +362,8 @@ def handle_client_request(client_socket):
                 "Content-Length": str(len(response_body)),
                 "Content-Type": "text/plain",
                 "Content-Disposition": _headers.get("Content-Disposition"),
-                "Connection": "keep-alive"
+                "Connection": "keep-alive",
+                "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
             }
             response_status_line = None
 
