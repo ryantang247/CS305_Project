@@ -2,6 +2,7 @@ class UrlParser:
     @staticmethod
     def process_url(url):
         # Extract the path and query parameters
+        global operation_type
         parsed_url = UrlParser.parse_qs(url)
         path = parsed_url['path']
 
@@ -21,11 +22,11 @@ class UrlParser:
             operation_type = "view"
         elif len(path.split("/")) >= 3:
 
-            if parsed_url['query']:
+            if not parsed_url['query']:
                 # This is a valid download type URL with both {name} and {file_name} segments (Maybe subject to change)
                 operation_type = "download"
-                if parsed_url['query'] == 'chunked=1':
-                    operation_type = "chunktrans"
+            if parsed_url['query'] == 'chunked=1':
+                operation_type = "chunktrans"
         else:
             # Unknown or unsupported URL type
             operation_type = "unknown"
