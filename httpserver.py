@@ -201,6 +201,36 @@ def isDeleteMethod(url):
         return False
 
 
+def receive_larger(client_socket, buffer_size=4096):
+    received_data = b""
+    while True:
+        chunk = client_socket.recv(buffer_size)
+        if not chunk:
+            break
+        received_data += chunk
+        if len(chunk) < buffer_size:
+            # Break the loop if the received chunk is less than the buffer size, indicating the end of the data
+            break
+    return received_data
+
+
+def process_request_data(client_socket):
+    received_data = receive_larger(client_socket)
+    result_data = None
+    try:
+        # Try to decode the received data as UTF-8
+        result_data = received_data.decode("utf-8")
+        # Your text data processing logic here
+
+    except UnicodeDecodeError:
+        # If decoding as UTF-8 fails, assume it's binary data
+        # You can use base64 encoding to handle binary data
+        result_data = base64.b64encode(received_data).decode("utf-8")
+        # Your binary data processing logic here
+
+    return result_data
+
+
 def handle_client_request(client_socket):
     # Receive data from the client
     # incr = 1;
@@ -211,7 +241,7 @@ def handle_client_request(client_socket):
     detectedClose = False
     username = None
     session_id = None
-    request_data = client_socket.recv(1024).decode("utf-8")
+    request_data = process_request_data(client_socket)
     if not request_data:
         return "Bye"
     authenticated = None
@@ -410,8 +440,8 @@ def handle_client_request(client_socket):
         #         print("close")
 
     if detectedClose:
-      
         return "Bye"
+
 
 def process_path(raw_path):
     # Unquote the path to handle percent-encoded characters
