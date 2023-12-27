@@ -336,6 +336,7 @@ def handle_client_request(client_socket):
             client_socket.sendall(
                 (response_status_line + response_header).encode('utf-8'))
             client_socket.sendall(server_public_key_bytes)
+            return
         path = current_directory + url
         # if url == "/":
         # Using a raw string

@@ -1,21 +1,5 @@
-<<<<<<< HEAD
---aee55c212e39088ccd5a413308c3620b
+--83f3b930cb08c0a51be9c165f2d55cbb
 Content-Disposition: form-data; name="firstFile"; filename="a.txt"
 
 sadfsdfasdf
---aee55c212e39088ccd5a413308c3620b--
-=======
-<<<<<<< HEAD
---9b38498c0e0c39b9f2c2cb19cb3cf5bd
-Content-Disposition: form-data; name="firstFile"; filename="a.txt"
-
-sadfsdfasdf
---9b38498c0e0c39b9f2c2cb19cb3cf5bd--
-=======
---31be61e51321d3a30e36d3130f83d73d
-Content-Disposition: form-data; name="firstFile"; filename="a.txt"
-
-sadfsdfasdf
---31be61e51321d3a30e36d3130f83d73d--
->>>>>>> 4d17a708619b13d29a65ce739a80101af0785fbe
->>>>>>> f218f3a548819e3ef3784abdb461cfddfb439554
+--83f3b930cb08c0a51be9c165f2d55cbb--
