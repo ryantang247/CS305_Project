@@ -1,9 +1,12 @@
+import os
 class UrlParser:
-    @staticmethod
-    def process_url(url):
+    def __init__(self, url):
+        self.url = url
+
+    def process_url(self):
         # Extract the path and query parameters
         global operation_type
-        parsed_url = UrlParser.parse_qs(url)
+        parsed_url = UrlParser.parse_qs(self.url)
         path = parsed_url['path']
 
         # Check for the existence of certain keywords in the path or query parameters
@@ -20,18 +23,32 @@ class UrlParser:
         elif parsed_url['query'] == "SUSTech-HTTP=1":
             # This is a view type URL
             operation_type = "return_list"
-        elif len(path.split("/")) >= 3:
-
+        elif self.has_file_name():
             if not parsed_url['query']:
                 # This is a valid download type URL with both {name} and {file_name} segments (Maybe subject to change)
                 operation_type = "download"
             if parsed_url['query'] == 'chunked=1':
                 operation_type = "chunktrans"
+        elif path == "/":
+            operation_type = "home_page"
         else:
             # Unknown or unsupported URL type
             operation_type = "unknown"
 
         return operation_type
+
+    def has_file_name(self):
+        # Parse the URL manually or use a URL parsing library
+        # For simplicity, let's assume the URL follows the format "http://example.com/path/to/filename.ext"
+        path_segments = self.url.split('/')
+
+        # Iterate through path segments
+        for segment in path_segments:
+            # Check if the segment looks like a file name
+            if bool(os.path.splitext(segment)[0]):
+                return True
+
+        return False
 
     @staticmethod
     def extract_name_from_url(url):

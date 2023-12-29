@@ -312,9 +312,10 @@ def handle_client_request(client_socket):
             client_socket.sendall(server_public_key_bytes)
             return
         path = current_directory + url
-        req_type = UrlParser.process_url(url)
+        url_parser = UrlParser(url)
+        req_type = url_parser.process_url()
         formatted_url = url.lstrip('/').replace('/', os.path.sep)
-        vd_class = ViewDownload(client_socket, current_directory)
+        vd_class = ViewDownload(client_socket, current_directory,session_id)
         if req_type == 'download':
             # Send the HTML content as the response
 
