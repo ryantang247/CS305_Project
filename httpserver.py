@@ -12,6 +12,7 @@ import threading
 import json
 import rsa
 import time
+
 account = {'client1': '123', 'client2': '123', 'client3': '123'}
 publicKey, privateKey = rsa.newkeys(512)
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -19,6 +20,7 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 print(f"The directory of the current file is: {current_directory}")
 
 session_keys = {}
+
 
 # Function to handle new client connections
 
@@ -29,10 +31,12 @@ def clear_session_keys():
         time.sleep(300)  # Sleep for 5 minutes (300 seconds)
         session_keys = {}  # Clear the dictionary
 
+
 # Start a separate thread to clear the session_keys
 clear_keys_thread = threading.Thread(target=clear_session_keys)
 clear_keys_thread.daemon = True  # Set the thread as a daemon so it exits when the main program ends
 clear_keys_thread.start()
+
 
 # Function to handle client disconnection
 
@@ -163,6 +167,30 @@ def isDeleteMethod(url):
     else:
         return False
 
+
+def symmetric_decrypt(encrypted_data, key, iv):
+    # Convert the key and IV into bytes if they're not already in bytes format
+    key = key.encode() if isinstance(key, str) else key
+    iv = iv.encode() if isinstance(iv, str) else iv
+
+    # Ensure the key is 16, 24, or 32 bytes long (AES-128, AES-192, or AES-256)
+    if len(key) not in [16, 24, 32]:
+        raise ValueError(
+            "Key must be 16, 24, or 32 bytes long for AES decryption")
+
+    # Create an AES cipher object for decryption
+    cipher = Cipher(algorithms.AES(key), modes.CFB(iv),
+                    backend=default_backend())
+
+    # Create a decryptor
+    decryptor = cipher.decryptor()
+
+    # Decrypt the message
+    decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
+
+    return decrypted_data
+
+
 def receive_larger(client_socket, buffer_size=4096):
     received_data = b""
     while True:
@@ -192,27 +220,6 @@ def process_request_data(client_socket):
 
     return result_data
 
-def symmetric_decrypt(encrypted_data, key, iv):
-    # Convert the key and IV into bytes if they're not already in bytes format
-    key = key.encode() if isinstance(key, str) else key
-    iv = iv.encode() if isinstance(iv, str) else iv
-
-    # Ensure the key is 16, 24, or 32 bytes long (AES-128, AES-192, or AES-256)
-    if len(key) not in [16, 24, 32]:
-        raise ValueError(
-            "Key must be 16, 24, or 32 bytes long for AES decryption")
-
-    # Create an AES cipher object for decryption
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv),
-                    backend=default_backend())
-
-    # Create a decryptor
-    decryptor = cipher.decryptor()
-
-    # Decrypt the message
-    decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
-
-    return decrypted_data
 
 def handle_client_request(client_socket):
     # Receive data from the client
@@ -372,10 +379,10 @@ def handle_client_request(client_socket):
 
     elif method == "POST":
         # Handle POST request - receive data from the client
-        
+
         try:
             if url == "/receive_key":
-            # Receive encrypted symmetric key from client
+                # Receive encrypted symmetric key from client
                 session_id = extractHeader(request_data)['Session-ID']
                 json_start = request_data.find('{')
                 json_data = request_data[json_start:]
@@ -398,11 +405,11 @@ def handle_client_request(client_socket):
                 # You can use it for further symmetric encryption/decryption
                 response_data = decrypted_symmetric_key
                 session_keys[session_id] = decrypted_symmetric_key
-    # Add necessary HTTP response headers
+                # Add necessary HTTP response headers
                 response_headers = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + \
-                    str(len(response_data)) + "\r\n\r\n"
+                                   str(len(response_data)) + "\r\n\r\n"
 
-    # Combine headers and response data
+                # Combine headers and response data
                 response = response_headers.encode('utf-8') + response_data
 
                 # Send the response to the client
@@ -421,11 +428,12 @@ def handle_client_request(client_socket):
                     'encrypted_data', '')
                 IV = extractHeader(request_data)[
                     'IV']
-                decrypted_message = symmetric_decrypt(bytes.fromhex(encrypted_data_client), decrypted_symmetric_key_client, bytes.fromhex(IV))
+                decrypted_message = symmetric_decrypt(bytes.fromhex(encrypted_data_client),
+                                                      decrypted_symmetric_key_client, bytes.fromhex(IV))
                 response_headers = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + \
-                    str(len(decrypted_message)) + "\r\n\r\n"
+                                   str(len(decrypted_message)) + "\r\n\r\n"
 
-    # Combine headers and response data
+                # Combine headers and response data
                 response = response_headers.encode('utf-8') + decrypted_message
 
                 # Send the response to the client
@@ -527,7 +535,6 @@ def process_path(raw_path):
 def upload(client_socket, url, received_data, username, headers):
     # Extract query parameters using parse_qs
     query_params = parse_qs(urlparse(url).query)
-    # print("****** Query Params: ", query_params)
 
     # Check for the "path" parameter in the query
     upload_path = query_params.get('path', [''])[0]
@@ -551,8 +558,7 @@ def upload(client_socket, url, received_data, username, headers):
         content_disposition = headers.get("Content-Disposition")
         if content_disposition:
             # Manual parsing of Content-Disposition header
-            params = [param.strip()
-                      for param in content_disposition.split(";")]
+            params = [param.strip() for param in content_disposition.split(";")]
             filename_param = next(
                 (param for param in params if param.lower().startswith("filename")), None)
 
@@ -561,8 +567,18 @@ def upload(client_socket, url, received_data, username, headers):
                 filename = filename.strip("\"")
                 filename = filename.strip("\'")
                 file_path = os.path.join(target_directory, filename)
+
+                # Find the start and end of the file content
+                file_content_start = received_data.find(b'\r\n\r\n') + 4
+                file_content_end = received_data.find(b'--', file_content_start)
+
+                if file_content_end != -1:
+                    file_content = received_data[file_content_start:file_content_end - 2]
+                else:
+                    file_content = received_data[file_content_start:]
+
                 with open(file_path, 'wb') as file:
-                    file.write(received_data)
+                        file.write(file_content)
 
                 # Respond with a success message
                 response_status_line = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
