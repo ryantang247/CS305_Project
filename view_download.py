@@ -1,5 +1,6 @@
 import os
 
+
 class ViewDownload:
 
     def __init__(self, client_socket, current_directory):
@@ -148,7 +149,7 @@ class ViewDownload:
                 self.client_socket.sendall(hex_data)
         else:
             # If the file is not found, send a 404 response
-            send_404(self.client_socket)
+            self.send_404(self.client_socket)
 
     def login_func(self):
         path = os.path.join(self.current_directory, "login.html")

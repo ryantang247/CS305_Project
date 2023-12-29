@@ -1,12 +1,14 @@
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
+
 def download_file(url, headers):
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         print(f"Downloaded {url}")
     else:
         print(f"Failed to download {url}")
+
 
 def test_parallel_downloads():
     base_url = "http://localhost:8080/client1/goblok"  # Replace with your server URL
@@ -20,6 +22,7 @@ def test_parallel_downloads():
     with ThreadPoolExecutor(max_workers=10) as executor:
         # Pass the authorization header to the download_file function
         executor.map(lambda url: download_file(url, authorization_header), urls)
+
 
 if __name__ == "__main__":
     test_parallel_downloads()
