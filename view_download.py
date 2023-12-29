@@ -182,3 +182,12 @@ class ViewDownload:
 
         self.client_socket.sendall(response.encode('utf-8'))
         self.client_socket.close()
+
+    def send_400(self):
+        response = "HTTP/1.1 400 Not found\r\n"
+        response += "Content-Type: text/html\r\n"
+        response += "\r\n"
+        response += "<html><head><title>400 Bad Request</title></head><body><h1>400 Bad Request</h1></body></html>"
+
+        self.client_socket.sendall(response.encode('utf-8'))
+        self.client_socket.close()

@@ -329,9 +329,9 @@ def handle_client_request(client_socket):
             vd_class.login_func()
 
         elif req_type == "unknown":
-            send_400(client_socket)
+            vd_class.send_400()
         else:
-            send_400(client_socket)
+            vd_class.send_400()
 
     if method == "HEAD":
 
