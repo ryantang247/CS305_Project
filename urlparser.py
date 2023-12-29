@@ -16,10 +16,10 @@ class UrlParser:
             operation_type = "upload"
         elif parsed_url['query'] == "SUSTech-HTTP=0":
             # This is a view type URL
-            operation_type = "home_page"
+            operation_type = "view"
         elif parsed_url['query'] == "SUSTech-HTTP=1":
             # This is a view type URL
-            operation_type = "view"
+            operation_type = "return_list"
         elif len(path.split("/")) >= 3:
 
             if not parsed_url['query']:
