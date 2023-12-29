@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import socket
 import base64
 import os
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, unquote
 from view_download import ViewDownload
 from urlparser import UrlParser
 import hashlib
@@ -539,14 +539,25 @@ def process_path(raw_path):
 
     return processed_path
 
-
+def parse_query_params(url):
+    query_params = {}
+    query_start = url.find('?')
+    if query_start != -1:
+        query_string = url[query_start + 1:]
+        params = query_string.split('&')
+        for param in params:
+            key_value = param.split('=')
+            if len(key_value) == 2:
+                key, value = key_value
+                query_params[key] = value
+    return query_params
 
 def upload(client_socket, url, received_data, username, headers):
     # Extract query parameters using parse_qs
-    query_params = parse_qs(urlparse(url).query)
+    query_params = parse_query_params(url=url)
 
     # Check for the "path" parameter in the query
-    upload_path = query_params.get('path', [''])[0]
+    upload_path = query_params.get('path', [''])
     if not upload_path:
         response_status_line = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
         client_socket.sendall(response_status_line.encode('utf-8'))
@@ -606,10 +617,10 @@ def upload(client_socket, url, received_data, username, headers):
 
 def delete(client_socket, url, received_data, username):
     # Extract query parameters using parse_qs
-    query_params = parse_qs(urlparse(url).query)
+    query_params = parse_query_params(url=url)
 
     # Check for the "path" parameter in the query
-    delete_path = query_params.get('path', [''])[0]
+    delete_path = query_params.get('path', [''])
     print(delete_path)
     if not delete_path:
         error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
