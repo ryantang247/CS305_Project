@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import socket
 import base64
 import os
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, unquote
 from view_download import ViewDownload
 from urlparser import UrlParser
 import hashlib
@@ -12,6 +12,14 @@ import threading
 import json
 import rsa
 import time
+import argparse
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Server configuration')
+    parser.add_argument('-i', '--ip', type=str, default='127.0.0.1', help='Server IP address')
+    parser.add_argument('-p', '--port', type=int, default=8080, help='Server port number')
+    return parser.parse_args()
+
 
 account = {'client1': '123', 'client2': '123', 'client3': '123'}
 publicKey, privateKey = rsa.newkeys(512)
@@ -45,35 +53,6 @@ def handle_client_disconnection(session_id):
     # Remove the key associated with the session ID upon disconnection
     if session_id in session_keys:
         del session_keys[session_id]
-
-
-def process_url(url):
-    # Parse the URL
-    parsed_url = urlparse(url)
-
-    # Extract the path and query parameters
-    path = parsed_url.path.strip("/")
-    query_params = parse_qs(parsed_url.query)
-
-    # Check for the existence of certain keywords in the path or query parameters
-    if path.startswith("delete"):
-        # This is an upload/delete type URL
-        operation_type = "delete"
-        # file_path = query_params.get("path", [])[0]  # Extract the file path from the query parameters
-    elif path.startswith("upload"):
-        operation_type = "upload"
-    elif path and len(path.split("/")) == 2:
-        # This is a valid download type URL with both {name} and {file_name} segments
-        operation_type = "download"
-    elif "SUSTech-HTTP" in query_params:
-        # This is a view type URL
-        operation_type = "view"
-    else:
-        # Unknown or unsupported URL type
-        operation_type = "unknown"
-
-    return operation_type
-
 
 session_storage = {}
 
@@ -304,9 +283,10 @@ def handle_client_request(client_socket):
             client_socket.sendall(server_public_key_bytes)
             return
         path = current_directory + url
-        req_type = UrlParser.process_url(url)
+        url_parser = UrlParser(url)
+        req_type = url_parser.process_url()
         formatted_url = url.lstrip('/').replace('/', os.path.sep)
-        vd_class = ViewDownload(client_socket, current_directory)
+        vd_class = ViewDownload(client_socket, current_directory,session_id)
         if req_type == 'download':
             # Send the HTML content as the response
 
@@ -324,7 +304,7 @@ def handle_client_request(client_socket):
                 vd_class.chunked_trans_func(file_path)
 
             else:
-                send_404(client_socket)
+                vd_class.send_404()
         elif req_type == "return_list":
             vd_class.return_list_func(url)
 
@@ -336,11 +316,11 @@ def handle_client_request(client_socket):
             vd_class.login_func()
 
         elif req_type == "unknown":
-            send_400(client_socket)
+            vd_class.send_400()
         else:
-            send_400(client_socket)
+            vd_class.send_400()
 
-    if method == "HEAD":
+    elif method == "HEAD":
 
         path = current_directory + url
 
@@ -358,7 +338,7 @@ def handle_client_request(client_socket):
                 "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
             }
 
-            response_status_line = "HTTP/1.1 206 OK\r\n"
+            response_status_line = "HTTP/1.1 200 OK\r\n"
 
             response_header = ""
 
@@ -443,13 +423,13 @@ def handle_client_request(client_socket):
             content_length = _headers.get("Content-Length")
             if content_length is None:
                 # Content-Length header is defined in the headers
-                error_response = "HTTP/1.1 400 Bad Request\r\n\r\nInvalid Content-Length for POST"
+                error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
                 client_socket.sendall(error_response.encode('utf-8'))
                 return
             content_length = int(_headers.get("Content-Length", 0))
             if (content_length == 0) and (isDeleteMethod(url=url) == False):
                 # If Content-Length is specified as zero for POST, it's an invalid request
-                error_response = "HTTP/1.1 400 Bad Request\r\n\r\nInvalid Content-Length for POST"
+                error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
                 client_socket.sendall(error_response.encode('utf-8'))
                 return  # Exit without processing further if invalid
 
@@ -486,12 +466,15 @@ def handle_client_request(client_socket):
             # Send the response status line, headers, and response body
             # client_socket.sendall((response_status_line + response_header + response_body).encode('utf-8'))
             # print(process_url(url))
-            if process_url(url=url) == 'upload':
+
+            _url = UrlParser(url=url)
+            processed_url = _url.process_url()
+            if processed_url == 'upload':
                 # Upload Method
                 upload(client_socket=client_socket, url=url, received_data=received_data, username=username,
                        headers=headers)
 
-            elif process_url(url=url) == 'delete':
+            elif processed_url == 'delete':
                 # Delete Method
                 delete(client_socket=client_socket, url=url,
                        received_data=received_data, username=username)
@@ -531,13 +514,25 @@ def process_path(raw_path):
 
     return processed_path
 
+def parse_query_params(url):
+    query_params = {}
+    query_start = url.find('?')
+    if query_start != -1:
+        query_string = url[query_start + 1:]
+        params = query_string.split('&')
+        for param in params:
+            key_value = param.split('=')
+            if len(key_value) == 2:
+                key, value = key_value
+                query_params[key] = value
+    return query_params
 
 def upload(client_socket, url, received_data, username, headers):
     # Extract query parameters using parse_qs
-    query_params = parse_qs(urlparse(url).query)
+    query_params = parse_query_params(url=url)
 
     # Check for the "path" parameter in the query
-    upload_path = query_params.get('path', [''])[0]
+    upload_path = query_params.get('path', [''])
     if not upload_path:
         response_status_line = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
         client_socket.sendall(response_status_line.encode('utf-8'))
@@ -597,10 +592,10 @@ def upload(client_socket, url, received_data, username, headers):
 
 def delete(client_socket, url, received_data, username):
     # Extract query parameters using parse_qs
-    query_params = parse_qs(urlparse(url).query)
+    query_params = parse_query_params(url=url)
 
     # Check for the "path" parameter in the query
-    delete_path = query_params.get('path', [''])[0]
+    delete_path = query_params.get('path', [''])
     print(delete_path)
     if not delete_path:
         error_response = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'path' parameter in the query"
@@ -629,8 +624,11 @@ def delete(client_socket, url, received_data, username):
         client_socket.sendall(error_response.encode('utf-8'))
 
 
-SERVER = '127.0.0.1'  # localhost
-PORT = 8080  # Use a port number
+args = parse_arguments()
+SERVER = args.ip
+PORT = args.port
+# SERVER = '127.0.0.1'  # localhost
+# PORT = 8080  # Use a port number
 # Listen for incoming connections, queue up to 5 requests
 print("The server is ready to receive")
 
