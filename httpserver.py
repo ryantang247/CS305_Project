@@ -4,6 +4,8 @@ import socket
 import base64
 import os
 from urllib.parse import urlparse, parse_qs, unquote
+from view_download import ViewDownload
+from urlparser import UrlParser
 import hashlib
 from datetime import datetime
 import threading
@@ -73,62 +75,6 @@ def process_url(url):
     return operation_type
 
 
-def extract_name_from_url(url):
-    # Parse the URL
-    parsed_url = urlparse(url)
-
-    # Extract the path
-    path = parsed_url.path.strip("/")
-
-    # Split the path by "/" and get the second segment
-    path_segments = path.split("/")
-
-    # Check if there are at least 1 segments (may need modify)
-    if len(path_segments) >= 1:
-        # Extract the second segment, which is the {name} part
-        name = path_segments[0]
-        return name
-    else:
-        # Return None or raise an exception based on your specific requirement
-        return None
-
-
-def extract_file_from_url(url):
-    # Parse the URL
-    parsed_url = urlparse(url)
-
-    # Extract the path
-    path = parsed_url.path.strip("/")
-
-    # Split the path by "/" and get the second segment
-    path_segments = path.split("/")
-
-    # Check if there are at least 1 segments (may need modify)
-    if len(path_segments) >= 2:
-        # Extract the second segment, which is the {name} part
-        name = path_segments[1]
-        return name
-    else:
-        # Return None or raise an exception based on your specific requirement
-        return None
-
-
-def get_file_list(directory_path):
-    try:
-        # Get the list of files and directories in the specified path
-        entries = os.listdir(directory_path)
-
-        # Filter out directories, leaving only files
-        files = [entry for entry in entries if os.path.isfile(
-            os.path.join(directory_path, entry))]
-
-        return files
-    except OSError as e:
-        # Handle any potential errors, such as permission issues or non-existent directories
-        print(f"Error while getting file list: {e}")
-        return []
-
-
 session_storage = {}
 
 
@@ -153,23 +99,9 @@ def generate_unique_session_id(username):
     return hashed_data[:10]
 
 
-def generate_html(file_list):
-    html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
-    html_content += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n"
-    html_content += "<title>File List</title>\n</head>\n<body>\n"
-    html_content += "<h1>File List</h1>\n<ul>\n"
-
-    for file_name in file_list:
-        html_content += f"    <li>{file_name}</li>\n"
-
-    html_content += "</ul>\n</body>\n</html>"
-
-    return html_content
-
-
 def authenticate(headers):
     try:
-        auth_header = headers.get("Authorization")
+        auth_header = headers.get("Authorization") or headers.get("authorization")
 
         if auth_header and auth_header.startswith("Basic "):
             encoded_credentials = auth_header.split(" ")[1]
@@ -372,35 +304,41 @@ def handle_client_request(client_socket):
             client_socket.sendall(server_public_key_bytes)
             return
         path = current_directory + url
-        # if url == "/":
-        # Using a raw string
-        files = get_file_list(path)
+        req_type = UrlParser.process_url(url)
+        formatted_url = url.lstrip('/').replace('/', os.path.sep)
+        vd_class = ViewDownload(client_socket, current_directory)
+        if req_type == 'download':
+            # Send the HTML content as the response
 
-        # Render the HTML template with the file data
-        html_content = generate_html(files)
+            vd_class.download_func(formatted_url)
 
-        # Send the HTML content as the response
-        headers = {
-            "Content-Length": str(len(html_content)),
-            "Content-Type": "text/html",
-            "Connection": "keep-alive",
-            "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
-        }
-        response_status_line = "HTTP/1.1 200 OK\r\n"
-        response_header = ""
-        for header, value in headers.items():
-            response_header += f"{header}: {value}\r\n"
-        response_header += "\r\n"
+        elif req_type == 'chunktrans':
 
-        # Send the response status line, headers, and HTML content
-        client_socket.sendall(
-            (response_status_line + response_header).encode('utf-8'))
-        client_socket.sendall(html_content.encode('utf-8'))
-        # elif url.startswith("/files"):
-        #     handle_file_request(client_socket, url)
-        # else:
-        #     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
-        #     client_socket.sendall(error_response.encode('utf-8'))
+            # convert it to OS format
+            url_without_param = UrlParser.parse_qs(url)['path'].lstrip('/').replace('/', os.path.sep)
+            file_path = os.path.join(current_directory, "data", url_without_param)
+
+            # Check if the file exists
+            if os.path.exists(file_path):
+                # Open and read the file content
+                vd_class.chunked_trans_func(file_path)
+
+            else:
+                send_404(client_socket)
+        elif req_type == "return_list":
+            vd_class.return_list_func(url)
+
+        elif req_type == "view":
+
+            vd_class.view_file_list(url)
+
+        elif req_type == "home_page":
+            vd_class.login_func()
+
+        elif req_type == "unknown":
+            send_400(client_socket)
+        else:
+            send_400(client_socket)
 
     if method == "HEAD":
 
