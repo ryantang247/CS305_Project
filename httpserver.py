@@ -324,7 +324,7 @@ def handle_client_request(client_socket):
                 vd_class.chunked_trans_func(file_path)
 
             else:
-                send_404(client_socket)
+                vd_class.send_404()
         elif req_type == "return_list":
             vd_class.return_list_func(url)
 
@@ -340,7 +340,7 @@ def handle_client_request(client_socket):
         else:
             vd_class.send_400()
 
-    if method == "HEAD":
+    elif method == "HEAD":
 
         path = current_directory + url
 
@@ -443,7 +443,7 @@ def handle_client_request(client_socket):
             content_length = _headers.get("Content-Length")
             if content_length is None:
                 # Content-Length header is defined in the headers
-                error_response = "HTTP/1.1 400 Bad Request\r\n\r\nInvalid Content-Length for POST"
+                error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
                 client_socket.sendall(error_response.encode('utf-8'))
                 return
             content_length = int(_headers.get("Content-Length", 0))
