@@ -66,9 +66,8 @@ class ViewDownload:
             # Send the response headers
             headers = {
                 "HTTP/1.1": "200 OK",
-                "Transfer-Encoding": "chunked",
                 "Content-Type": "application/octet-stream",
-                "Connection": "keep-alive",
+                "Transfer-Encoding": "chunked",
             }
             response_header = ""
             for header, value in headers.items():
@@ -81,11 +80,12 @@ class ViewDownload:
             chunk_size = 1024
             for i in range(0, len(content), chunk_size):
                 chunk_size = min(1024, len(content) - i)
-                chunk = f"{chunk_size}:X\r\n{content[i:i + chunk_size]}\r\n"
-                self.client_socket.sendall(chunk.encode('utf-8'))
+                chunk = content[i:i + chunk_size]
+                tosend = b'%X\r\n%s\r\n' % (len(chunk), chunk)
+                self.client_socket.sendall(tosend)
 
-            closing_header = "0\r\n\r\n"
-            self.client_socket.sendall(closing_header.encode('utf-8'))
+            closing_header = b"0\r\n\r\n"
+            self.client_socket.sendall(closing_header)
 
     def return_list_func(self, url):
         url_parts = url.split('/')
@@ -148,7 +148,7 @@ class ViewDownload:
                 self.client_socket.sendall(hex_data)
         else:
             # If the file is not found, send a 404 response
-            send_404(self.client_socket)
+            self.send_404()
 
     def login_func(self):
         path = os.path.join(self.current_directory, "login.html")
@@ -179,6 +179,15 @@ class ViewDownload:
         response += "Content-Type: text/html\r\n"
         response += "\r\n"
         response += "<html><head><title>404 Not found</title></head><body><h1>404 Not found</h1><p>File not found</p></body></html>"
+
+        self.client_socket.sendall(response.encode('utf-8'))
+        self.client_socket.close()
+
+    def send_400(self):
+        response = "HTTP/1.1 400 Not found\r\n"
+        response += "Content-Type: text/html\r\n"
+        response += "\r\n"
+        response += "<html><head><title>400 Bad Request</title></head><body><h1>400 Bad Request</h1></body></html>"
 
         self.client_socket.sendall(response.encode('utf-8'))
         self.client_socket.close()
