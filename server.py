@@ -457,7 +457,7 @@ def handle_client_request(client_socket):
             content_length = int(_headers.get("Content-Length", 0))
             if (content_length == 0) and (isDeleteMethod(url=url) == False):
                 # If Content-Length is specified as zero for POST, it's an invalid request
-                error_response = "HTTP/1.1 400 Bad Request\r\n\r\nInvalid Content-Length for POST"
+                error_response = "HTTP/1.1 405 Method Not Allowed\r\n\r\nOnly POST method is allowed for file upload"
                 client_socket.sendall(error_response.encode('utf-8'))
                 return  # Exit without processing further if invalid
 
@@ -538,6 +538,7 @@ def process_path(raw_path):
     processed_path = unquoted_path.strip('/')
 
     return processed_path
+
 
 
 def upload(client_socket, url, received_data, username, headers):
@@ -635,6 +636,7 @@ def delete(client_socket, url, received_data, username):
     else:
         error_response = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to delete this file"
         client_socket.sendall(error_response.encode('utf-8'))
+
 
 args = parse_arguments()
 SERVER = args.ip
