@@ -8,9 +8,13 @@ class UrlParser:
         # Extract the path and query parameters
         global operation_type
         parsed_url = UrlParser.parse_qs(self.url)
+
         path = parsed_url['path']
         path = path.strip("/")
+        file_path = os.path.join(self.current_directory, "data", path)
+        file_path = file_path.replace('/', os.path.sep)
         # Check for the existence of certain keywords in the path or query parameters
+
         if path.startswith("delete"):
             # This is an upload/delete type URL
             operation_type = "delete"
@@ -20,28 +24,47 @@ class UrlParser:
             operation_type = "upload"
         elif parsed_url['query'] == "SUSTech-HTTP=0":
             # This is a view type URL
-            operation_type = "view"
+            file_path = os.path.join(self.current_directory, "data", path)
+            file_path = file_path.replace('/', os.path.sep)
+
+            if os.path.isdir(file_path):
+                operation_type = "view"
+            else:
+                operation_type = "not_found"
+
         elif parsed_url['query'] == "SUSTech-HTTP=1":
             # This is a view type URL
-            operation_type = "return_list"
+            file_path = os.path.join(self.current_directory, "data", path)
+            file_path = file_path.replace('/', os.path.sep)
+
+            if os.path.isdir(file_path):
+                operation_type = "return_list"
+            else:
+                operation_type = "not_found"
         elif self.has_file_name():
+
+            # if there is a file name, and there is no query
             if not parsed_url['query']:
                 # Check if the path corresponds to an actual file
                 file_path = os.path.join(self.current_directory, "data",path)
+                file_path = file_path.replace('/',os.path.sep)
                 if os.path.isfile(file_path):
                     # This is a valid download type URL with an actual file
                     operation_type = "download"
+                elif os.path.isdir(file_path):
+                    operation_type = "view"
                 else:
                     # This is a directory, handle accordingly
-                    operation_type = "view"
+                    operation_type = "not_found"
             elif parsed_url['query'] == 'chunked=1':
                 file_path = os.path.join(self.current_directory, "data", path)
+                file_path = file_path.replace(os.path.sep, '/')
                 if os.path.isfile(file_path):
                     operation_type = "chunktrans"
                 else:
                     operation_type = "unknown"
-
-
+            else:
+                operation_type = "unknown"
         elif path == "":
             operation_type = "home_page"
         else:

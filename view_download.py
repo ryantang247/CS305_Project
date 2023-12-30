@@ -82,33 +82,37 @@ class ViewDownload:
         return html_content
 
     def chunked_trans_func(self, file_path):
-        with open(file_path, 'rb') as file:
-            content = file.read()
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            with open(file_path, 'rb') as file:
+                content = file.read()
 
-            # Send the response headers
-            headers = {
-                "HTTP/1.1": "200 OK",
-                "Content-Type": "application/octet-stream",
-                "Transfer-Encoding": "chunked",
-                "Set-Cookie": f"session_id={self.session_id}; HttpOnly; Path=/"
-            }
-            response_header = ""
-            for header, value in headers.items():
-                response_header += f"{header}: {value}\r\n"
+                # Send the response headers
+                headers = {
+                    "HTTP/1.1": "200 OK",
+                    "Content-Type": "application/octet-stream",
+                    "Transfer-Encoding": "chunked",
+                    "Set-Cookie": f"session_id={self.session_id}; HttpOnly; Path=/"
+                }
+                response_header = ""
+                for header, value in headers.items():
+                    response_header += f"{header}: {value}\r\n"
 
-            # Append an empty line to indicate the end of headers
-            response_header += "\r\n"
-            self.client_socket.sendall(response_header.encode('utf-8'))
+                # Append an empty line to indicate the end of headers
+                response_header += "\r\n"
+                self.client_socket.sendall(response_header.encode('utf-8'))
 
-            chunk_size = 1024
-            for i in range(0, len(content), chunk_size):
-                chunk_size = min(1024, len(content) - i)
-                chunk = content[i:i + chunk_size]
-                tosend = b'%X\r\n%s\r\n' % (len(chunk), chunk)
-                self.client_socket.sendall(tosend)
+                chunk_size = 1024
+                for i in range(0, len(content), chunk_size):
+                    chunk_size = min(1024, len(content) - i)
+                    chunk = content[i:i + chunk_size]
+                    tosend = b'%X\r\n%s\r\n' % (len(chunk), chunk)
+                    self.client_socket.sendall(tosend)
 
-            closing_header = b"0\r\n\r\n"
-            self.client_socket.sendall(closing_header)
+                closing_header = b"0\r\n\r\n"
+                self.client_socket.sendall(closing_header)
+
+        else:
+            self.send_404()
 
     def return_list_func(self, url):
         url_parts = url.split('/')

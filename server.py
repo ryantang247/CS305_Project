@@ -316,6 +316,8 @@ def handle_client_request(client_socket):
 
         elif req_type == "unknown":
             vd_class.send_400()
+        elif req_type == "not_found":
+            vd_class.send_404()
         else:
             vd_class.send_400()
 
