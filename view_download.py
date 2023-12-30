@@ -51,11 +51,11 @@ class ViewDownload:
             # Get the list of files and directories in the specified path
             entries = os.listdir(directory_path)
 
-            return entries
-        except OSError as e:
-            # Handle any potential errors, such as permission issues or non-existent directories
-            print(f"Error while getting file list: {e}")
-            return []
+            # Append "/" to directory names
+            entries_with_slash = [entry + '/' if os.path.isdir(os.path.join(directory_path, entry)) else entry for entry
+                                  in entries]
+
+            return entries_with_slash
         except OSError as e:
             # Handle any potential errors, such as permission issues or non-existent directories
             print(f"Error while getting file list: {e}")
@@ -68,9 +68,16 @@ class ViewDownload:
         html_content += "<h1>File List</h1>\n<ul>\n"
 
         for file_name in file_list:
-            html_content += f"    <li> <a href='{file_name}'>{file_name}></a></li>\n"
+            # Check if the entry is a directory (ends with '/')
+            is_directory = file_name.endswith('/')
+            # Remove the '/' if it's a directory
+            display_name = file_name[:-1] if is_directory else file_name
+
+            html_content += f"    <li> <a href='{file_name}'>{display_name}</a></li>\n"
 
         html_content += "</ul>\n</body>\n</html>"
+
+        return html_content
 
         return html_content
 

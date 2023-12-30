@@ -3,7 +3,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import socket
 import base64
 import os
-from urllib.parse import urlparse, unquote
 from view_download import ViewDownload
 from urlparser import UrlParser
 import hashlib
@@ -283,7 +282,7 @@ def handle_client_request(client_socket):
             client_socket.sendall(server_public_key_bytes)
             return
         path = current_directory + url
-        url_parser = UrlParser(url)
+        url_parser = UrlParser(url,current_directory)
         req_type = url_parser.process_url()
         formatted_url = url.lstrip('/').replace('/', os.path.sep)
         vd_class = ViewDownload(client_socket, current_directory,session_id)

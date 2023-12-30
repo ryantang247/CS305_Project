@@ -1,7 +1,8 @@
 import os
 class UrlParser:
-    def __init__(self, url):
+    def __init__(self, url, current_directory):
         self.url = url
+        self.current_directory = current_directory
 
     def process_url(self):
         # Extract the path and query parameters
@@ -25,11 +26,23 @@ class UrlParser:
             operation_type = "return_list"
         elif self.has_file_name():
             if not parsed_url['query']:
-                # This is a valid download type URL with both {name} and {file_name} segments (Maybe subject to change)
-                operation_type = "download"
-            if parsed_url['query'] == 'chunked=1':
-                operation_type = "chunktrans"
-        elif path == "/":
+                # Check if the path corresponds to an actual file
+                file_path = os.path.join(self.current_directory, "data",path)
+                if os.path.isfile(file_path):
+                    # This is a valid download type URL with an actual file
+                    operation_type = "download"
+                else:
+                    # This is a directory, handle accordingly
+                    operation_type = "view"
+            elif parsed_url['query'] == 'chunked=1':
+                file_path = os.path.join(self.current_directory, "data", path)
+                if os.path.isfile(file_path):
+                    operation_type = "chunktrans"
+                else:
+                    operation_type = "unknown"
+
+
+        elif path == "":
             operation_type = "home_page"
         else:
             # Unknown or unsupported URL type
