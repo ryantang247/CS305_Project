@@ -12,7 +12,8 @@ import json
 import rsa
 import time
 import argparse
-
+from PIL import Image
+from io import BytesIO
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Server configuration')
@@ -102,32 +103,110 @@ def authenticate(headers):
         return False
 
 
-def extractHeader(request_data):
-    request_lines = request_data.split("\r\n")
-    headers = {}
-    print()
-    for line in request_lines[1:]:
-        if line:
-            parts = line.split(":", 1)  # Split at the first occurrence of ":"
-            if len(parts) == 2:
-                key, value = parts
-                headers[key.strip()] = value.strip()
-            else:
-                print(f"Ignoring invalid header line: {line}")
-    return headers
+def extractHeader_utf(request_data):
+    extracted_headers, body_data = brute_force_separation_utf8(request_data)
+    return extracted_headers, body_data
 
 
-def extractData(request_data):
-    # Extract content length from headers
-    headers = extractHeader(request_data)
-    content_length = int(headers.get("Content-Length", 0))
+def extractHeader_base64(request_data):
+    extracted_headers, body_data = brute_force_separation_base64(request_data)
+    return extracted_headers, body_data
 
-    # Extract data from the request body
-    # Find the position where data starts
-    data_start = request_data.find("\r\n\r\n") + 4
-    data = request_data[data_start:data_start + content_length]
+def brute_force_separation_base64(request_bytes):
+    extracted_headers = {}
+    body_data = None
+    boundary = b"\r\n\r\n"
+    index = request_bytes.find(boundary)
 
-    return data
+    while index != -1:
+        header_bytes = request_bytes[:index]
+        body_bytes = request_bytes[index + len(boundary):]
+
+        # Check if the body starts with "HTTP", indicating the start of a new request
+        if body_bytes.startswith(b"HTTP"):
+            return extracted_headers, b""
+
+        try:
+            header_str = header_bytes.decode("utf-8")
+            # Split each line of the header into key-value pairs
+            header_lines = header_str.split("\r\n")[1:]  # Skip the first line which is the request line
+            for line in header_lines:
+                key, value = line.split(":", 1)
+                extracted_headers[key.strip()] = value.strip()
+                print(f"Header: {key.strip()} -> {value.strip()}")
+
+        except UnicodeDecodeError:
+            print("Non-UTF-8 Header")
+
+        print("Body:")
+        print(body_bytes)
+        body_data = body_bytes
+        # Look for the next occurrence of "\r\n\r\n"
+        request_bytes = request_bytes[index + len(boundary):]
+        index = request_bytes.find(boundary)
+
+    return extracted_headers, body_data
+
+
+def brute_force_separation_utf8(request_bytes):
+    extracted_headers = {}
+    body_data = None
+    boundary = "\r\n\r\n"
+    index = request_bytes.find(boundary)
+
+    while index != -1:
+        header_bytes = request_bytes[:index]
+        body_bytes = request_bytes[index + len(boundary):]
+
+        # Check if the body starts with "HTTP", indicating the start of a new request
+        if body_bytes.startswith("HTTP"):
+            return extracted_headers, ""
+
+        try:
+            header_str = header_bytes
+            # Split each line of the header into key-value pairs
+            header_lines = header_str.split("\r\n")[1:]  # Skip the first line which is the request line
+            for line in header_lines:
+                key, value = line.split(":", 1)
+                extracted_headers[key.strip()] = value.strip()
+                print(f"Header: {key.strip()} -> {value.strip()}")
+
+        except UnicodeDecodeError:
+            pass  # Continue the loop if UTF-8 decoding fails for the current header
+
+        print("Body:")
+        print(body_bytes)
+        body_data = body_bytes
+        # Look for the next occurrence of "\r\n\r\n"
+        request_bytes = request_bytes[index + len(boundary):]
+        index = request_bytes.find(boundary)
+
+    body_data = body_data.split("\r\n", 1)[0]
+
+    return extracted_headers, body_data
+
+
+
+def decodeData(data, content_length):
+    received_data = b''  # Assuming received_data is initially a bytes object
+    while len(received_data) < content_length:
+        try:
+            # Attempt to decode as UTF-8
+            received_data += data
+            decoded_text = received_data.decode('utf-8')
+            print(f"Decoded as UTF-8:\n{decoded_text}")
+        except UnicodeDecodeError:
+            pass  # Continue the loop if UTF-8 decoding fails
+
+    try:
+        # If decoding as UTF-8 fails for the entire data, attempt base64 decoding
+        decoded_data = base64.b64decode(received_data)
+        print(f"Decoded as base64:\n{decoded_data}")
+    except Exception as e:
+        print(f"Error decoding data: {e}")
+
+    return received_data
+
 
 
 def get_key_from_value(dictionary, search_value):
@@ -170,11 +249,11 @@ def symmetric_decrypt(encrypted_data, key, iv):
 
     return decrypted_data
 
-
 def receive_larger(client_socket, buffer_size=4096):
     received_data = b""
     while True:
         chunk = client_socket.recv(buffer_size)
+        print(chunk, "Fuck\n")
         if not chunk:
             break
         received_data += chunk
@@ -188,6 +267,7 @@ def process_request_data(client_socket):
     received_data = receive_larger(client_socket)
     result_data = None
     try:
+        utf = True
         # Try to decode the received data as UTF-8
         result_data = received_data.decode("utf-8")
         # Your text data processing logic here
@@ -195,10 +275,11 @@ def process_request_data(client_socket):
     except UnicodeDecodeError:
         # If decoding as UTF-8 fails, assume it's binary data
         # You can use base64 encoding to handle binary data
-        result_data = base64.b64encode(received_data).decode("utf-8")
+        utf = False
+        result_data = base64.b64encode(received_data)
         # Your binary data processing logic here
 
-    return result_data
+    return result_data, utf
 
 
 def handle_client_request(client_socket):
@@ -211,20 +292,27 @@ def handle_client_request(client_socket):
     detectedClose = False
     username = None
     session_id = None
-    request_data = process_request_data(client_socket)
+    request_data, utf = process_request_data(client_socket)
     if not request_data:
         return "Bye"
-    authenticated = None
-    print(request_data)
-    if extractHeader(request_data)['Connection'].lower() == 'close':
+    decoded_data = None
+    extracted_header = None
+    if not utf:
+        decoded_data = base64.b64decode(request_data)
+        extracted_header, body = extractHeader_base64(decoded_data)
+    else:
+        decoded_data = request_data
+        extracted_header, body = extractHeader_utf(decoded_data)
+    # extracted_header = _extracted_header[0]
+    if extracted_header['Connection'].lower() == 'close':
         detectedClose = True
     try:
-        print('cookie', extractHeader(request_data)['Cookie'])
-        if extractHeader(request_data)['Cookie']:
+        print('cookie', extracted_header['Cookie'])
+        if extracted_header['Cookie']:
             username = get_key_from_value(
-                session_storage, extractHeader(request_data)['Cookie'])
+                session_storage, extracted_header['Cookie'])
             if username is None:
-                authenticated = authenticate(extractHeader(request_data))
+                authenticated = authenticate(extracted_header)
                 if not authenticated:
                     error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
@@ -234,7 +322,7 @@ def handle_client_request(client_socket):
                 username = authenticated[2]
         else:
             print("user not yet auth")
-            authenticated = authenticate(extractHeader(request_data))
+            authenticated = authenticate(extracted_header)
             if not authenticated:
                 error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
@@ -244,7 +332,7 @@ def handle_client_request(client_socket):
             username = authenticated[2]
     except Exception as e:
         print("exception on auth", e)
-        authenticated = authenticate(extractHeader(request_data))
+        authenticated = authenticate(extracted_header)
         if not authenticated:
             error_response = "HTTP/1.1 401 Unauthorized\r\n\r\nUnauthorized Access"
 
@@ -253,10 +341,17 @@ def handle_client_request(client_socket):
         session_id = authenticated[1]
         username = authenticated[2]
     # Parse HTTP request
-    request_lines = request_data.split("\r\n")
+    request_line = ""
+    if(utf == True):
+        request_lines = decoded_data.split("\r\n")
+        request_line = request_lines[0]
+        print(request_line.split(" "))
+    else:
+        request_lines = decoded_data.split(b"\r\n")
+        request_line = request_lines[0]
+        request_line = request_line.decode('utf-8')
+        print(request_line.split(" "))
 
-    request_line = request_lines[0]
-    print(request_line.split(" "))
     method, url, _ = request_line.split(" ")
 
     # Implement logic based on the HTTP method
@@ -366,7 +461,7 @@ def handle_client_request(client_socket):
         try:
             if url == "/receive_key":
                 # Receive encrypted symmetric key from client
-                session_id = extractHeader(request_data)['Session-ID']
+                session_id = extracted_header['Session-ID']
                 json_start = request_data.find('{')
                 json_data = request_data[json_start:]
 
@@ -404,13 +499,11 @@ def handle_client_request(client_socket):
 
                 # Extract the encrypted key from the JSON payload
 
-                decrypted_symmetric_key_client = session_keys[extractHeader(request_data)[
-                    'Session-ID']]
+                decrypted_symmetric_key_client = session_keys[extracted_header['Session-ID']]
 
                 encrypted_data_client = json.loads(json_data).get(
                     'encrypted_data', '')
-                IV = extractHeader(request_data)[
-                    'IV']
+                IV = extracted_header['IV']
                 decrypted_message = symmetric_decrypt(bytes.fromhex(encrypted_data_client),
                                                       decrypted_symmetric_key_client, bytes.fromhex(IV))
                 response_headers = "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + \
@@ -422,7 +515,7 @@ def handle_client_request(client_socket):
                 # Send the response to the client
                 client_socket.sendall(response)
                 return
-            _headers = extractHeader(request_data)
+            _headers = extracted_header
             content_length = _headers.get("Content-Length")
             if content_length is None:
                 # Content-Length header is defined in the headers
@@ -436,22 +529,21 @@ def handle_client_request(client_socket):
                 client_socket.sendall(error_response.encode('utf-8'))
                 return  # Exit without processing further if invalid
 
-            received_data = b""  # Initialize an empty byte string to store incoming data
             print("length: ", content_length)
             # Receive data until the full content is received based on the Content-Length
-
-            data = extractData(request_data)
             # print("*** POST Data", data)
-            while len(received_data) < content_length:
-                received_data += data.encode()
-                print(received_data)
+            received_data = None
+            if not utf:
+                received_data = decodeData(body, content_length)
+            else:
+                received_data = body
 
             # Check for Authorization header
 
             response_body = "Data received successfully"
             headers = {
                 "Content-Length": str(len(response_body)),
-                "Content-Type": "text/plain",
+                "Content-Type": "application/octet-stream",
                 "Content-Disposition": _headers.get("Content-Disposition"),
                 "Connection": "keep-alive",
                 "Set-Cookie": f"session_id={session_id}; HttpOnly; Path=/",
@@ -475,7 +567,7 @@ def handle_client_request(client_socket):
             if processed_url == 'upload':
                 # Upload Method
                 upload(client_socket=client_socket, url=url, received_data=received_data, username=username,
-                       headers=headers)
+                       headers=headers, utf=utf)
 
             elif processed_url == 'delete':
                 # Delete Method
@@ -532,7 +624,7 @@ def parse_query_params(url):
     return query_params
 
 
-def upload(client_socket, url, received_data, username, headers):
+def upload(client_socket, url, received_data, username, headers, utf):
     # Extract query parameters using parse_qs
     query_params = parse_query_params(url=url)
 
@@ -568,21 +660,22 @@ def upload(client_socket, url, received_data, username, headers):
                 filename = filename.strip("\'")
                 file_path = os.path.join(target_directory, filename)
 
-                # Find the start and end of the file content
-                file_content_start = received_data.find(b'\r\n\r\n') + 4
-                file_content_end = received_data.find(b'--', file_content_start)
+                # # Find the start and end of the file content
+                # file_content_start = received_data.find(b'\r\n\r\n') + 4
+                # file_content_end = received_data.find(b'--', file_content_start)
+                #
+                # if file_content_end != -1:
+                #     file_content = received_data[file_content_start:file_content_end - 2]
+                # else:
+                #     file_content = received_data[file_content_start:]
 
-                if file_content_end != -1:
-                    file_content = received_data[file_content_start:file_content_end - 2]
-                else:
-                    file_content = received_data[file_content_start:]
+                save_file(file_path, received_data, utf=utf)
 
-                with open(file_path, 'wb') as file:
-                    file.write(file_content)
 
                 # Respond with a success message
                 response_status_line = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
                 client_socket.sendall(response_status_line.encode('utf-8'))
+                return
             else:
                 response_status_line = "HTTP/1.1 400 Bad Request\r\n\r\nMissing 'filename' in Content-Disposition header"
                 client_socket.sendall(response_status_line.encode('utf-8'))
@@ -593,6 +686,19 @@ def upload(client_socket, url, received_data, username, headers):
     else:
         response_status_line = "HTTP/1.1 403 Forbidden\r\n\r\nYou don't have permission to upload to this directory"
         client_socket.sendall(response_status_line.encode('utf-8'))
+
+def save_file(file_path, received_data, utf=True):
+    try:
+        with open(file_path, 'wb') as file:
+            if utf:
+                # If data is a string, encode it as UTF-8 before writing
+                file.write(received_data.encode('utf-8'))
+
+            else:
+                file.write(received_data)
+
+    except Exception as e:
+        print(f"Error saving file: {e}")
 
 
 def delete(client_socket, url, received_data, username):
