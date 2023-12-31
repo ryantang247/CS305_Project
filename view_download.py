@@ -1,5 +1,5 @@
 import os
-
+from urlparser import UrlParser
 
 class ViewDownload:
 
@@ -12,13 +12,11 @@ class ViewDownload:
         url_parts = url.split('/')
 
         new_query = self.parse_query(url)
-
-
         path = os.path.join(self.current_directory, "data", new_query)
         files = self.get_file_list(path)
 
         # Render the HTML template with the file data
-        html_content = self.generate_html(files)
+        html_content = self.generate_html(files,url)
         headers = {
             "Content-Length": str(len(html_content)),
             "Content-Type": "text/html",
@@ -61,11 +59,39 @@ class ViewDownload:
             print(f"Error while getting file list: {e}")
             return []
 
-    def generate_html(self, file_list):
+    def generate_html(self, file_list, url):
+        directory_separator = "/"
+
+        # Ensure the URL ends with a '/'
+        url = url if url.endswith('/') else url + '/'
+
+        # Find the last occurrence of the directory separator
+        last_separator_index = url[:-1].rfind(directory_separator)
+
+        # Extract the substring until the last occurrence of the directory separator
+        previous_dir = url[1:last_separator_index + 1]  # Exclude the leading '/'
+
+        # Ensure the result ends with a '/'
+        previous_dir = previous_dir if previous_dir.endswith('/') else previous_dir + '/'
+
+        print("Previous dir ", previous_dir)
         html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
         html_content += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>\n"
-        html_content += "<title>File List</title>\n</head>\n<body>\n"
+        html_content += "<title>File List</title>\n"
+        html_content += "<style>"
+        html_content += "body { font-family: Arial, sans-serif; margin: 20px; }"
+        html_content += "ul { list-style-type: none; padding: 0; }"
+        html_content += "li { margin-bottom: 10px; }"
+        html_content += "a { text-decoration: none; color: #007bff; }"
+        html_content += "a:hover { text-decoration: underline; }"
+        html_content += ".button { display: inline-block; padding: 8px 16px; background-color: #007bff; color: #fff; border: none; cursor: pointer; }"
+        html_content += "</style>\n"
+        html_content += "</head>\n<body>\n"
         html_content += "<h1>File List</h1>\n<ul>\n"
+        html_content += f"    <li> <a href='{previous_dir}'>.</a></li>\n"
+        html_content += f"    <li> <a href='/'>..</a></li>\n"
+
+        url_parser = UrlParser(url, self.current_directory)
 
         for file_name in file_list:
             # Check if the entry is a directory (ends with '/')
@@ -73,11 +99,25 @@ class ViewDownload:
             # Remove the '/' if it's a directory
             display_name = file_name[:-1] if is_directory else file_name
 
-            html_content += f"    <li> <a href='{file_name}'>{display_name}</a></li>\n"
+            html_content += f"    <li> <a href='{file_name}'>{display_name}</a>"
+            if not is_directory:
+                # Add buttons for upload and delete if it's a file
+                html_content += f" <a class='button' href='{file_name}?chunked=1'>Chunked Download</a>"
+                html_content += f" <form method='post' action='../delete?path={url.lstrip('/')}{file_name.strip('/')}'>"
+                html_content += f"      <input type='submit' value='Delete' class='button'/>"
+                html_content += f" </form>"
 
-        html_content += "</ul>\n</body>\n</html>"
+            html_content += "</li>\n"
 
-        return html_content
+        html_content += f"<form method='post' enctype='multipart/form-data' action='../upload?path={url.lstrip('/')}'>"
+        html_content += f"<input type='file' name='file' class='button'/>"
+        html_content += f"      <input type='submit' value='Submit' class='button'/></form>"
+        html_content += "</ul>\n</body>\n"
+        html_content += "<script>"
+        html_content += "function uploadFile(fileName) { alert('Upload: ' + fileName); }"
+        html_content += "function deleteFile(fileName) { alert('Delete: ' + fileName); }"
+        html_content += "</script>"
+        html_content += "</html>"
 
         return html_content
 

@@ -254,7 +254,6 @@ def receive_larger(client_socket, buffer_size=4096):
     received_data = b""
     while True:
         chunk = client_socket.recv(buffer_size)
-        print(chunk, "Fuck\n")
         if not chunk:
             break
         received_data += chunk
@@ -412,7 +411,7 @@ def handle_client_request(client_socket):
             vd_class.view_file_list(url)
 
         elif req_type == "home_page":
-            vd_class.login_func()
+            vd_class.view_file_list(url)
 
         elif req_type == "unknown":
             vd_class.send_400()
