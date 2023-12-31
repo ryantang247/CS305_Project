@@ -13,6 +13,7 @@ import rsa
 import time
 import argparse
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Server configuration')
     parser.add_argument('-i', '--ip', type=str, default='127.0.0.1', help='Server IP address')
@@ -52,6 +53,7 @@ def handle_client_disconnection(session_id):
     # Remove the key associated with the session ID upon disconnection
     if session_id in session_keys:
         del session_keys[session_id]
+
 
 session_storage = {}
 
@@ -282,10 +284,10 @@ def handle_client_request(client_socket):
             client_socket.sendall(server_public_key_bytes)
             return
         path = current_directory + url
-        url_parser = UrlParser(url,current_directory)
+        url_parser = UrlParser(url, current_directory)
         req_type = url_parser.process_url()
         formatted_url = url.lstrip('/').replace('/', os.path.sep)
-        vd_class = ViewDownload(client_socket, current_directory,session_id)
+        vd_class = ViewDownload(client_socket, current_directory, session_id)
         if req_type == 'download':
             # Send the HTML content as the response
 
@@ -468,7 +470,7 @@ def handle_client_request(client_socket):
             # client_socket.sendall((response_status_line + response_header + response_body).encode('utf-8'))
             # print(process_url(url))
 
-            _url = UrlParser(url=url)
+            _url = UrlParser(url=url, current_directory=current_directory)
             processed_url = _url.process_url()
             if processed_url == 'upload':
                 # Upload Method
@@ -508,12 +510,13 @@ def handle_client_request(client_socket):
 
 def process_path(raw_path):
     # Unquote the path to handle percent-encoded characters
-    unquoted_path = unquote(raw_path)
+    # unquoted_path = custom_unquote(raw_path)
 
     # Remove leading and trailing slashes
-    processed_path = unquoted_path.strip('/')
+    processed_path = raw_path.strip('/')
 
     return processed_path
+
 
 def parse_query_params(url):
     query_params = {}
@@ -527,6 +530,7 @@ def parse_query_params(url):
                 key, value = key_value
                 query_params[key] = value
     return query_params
+
 
 def upload(client_socket, url, received_data, username, headers):
     # Extract query parameters using parse_qs
@@ -574,7 +578,7 @@ def upload(client_socket, url, received_data, username, headers):
                     file_content = received_data[file_content_start:]
 
                 with open(file_path, 'wb') as file:
-                        file.write(file_content)
+                    file.write(file_content)
 
                 # Respond with a success message
                 response_status_line = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully"
