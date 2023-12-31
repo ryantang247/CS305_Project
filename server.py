@@ -210,6 +210,7 @@ def decodeData(data, content_length):
 
 
 def get_key_from_value(dictionary, search_value):
+
     for key, value in dictionary.items():
         if value == search_value:
             return key
@@ -307,10 +308,12 @@ def handle_client_request(client_socket):
     if extracted_header['Connection'].lower() == 'close':
         detectedClose = True
     try:
-        print('cookie', extracted_header['Cookie'])
+        print('cookie', extracted_header['Cookie'].split('=')[1])
+        print(session_storage)
         if extracted_header['Cookie']:
             username = get_key_from_value(
-                session_storage, extracted_header['Cookie'])
+                session_storage, extracted_header['Cookie'].split('=')[1])
+
             if username is None:
                 authenticated = authenticate(extracted_header)
                 if not authenticated:
