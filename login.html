@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome to CS305!</title>
 </head>
+
 <body>
     <h2>Login</h2>
     <form action="/login" method="post">
@@ -16,5 +18,36 @@
         <br>
         <input type="submit" value="Login">
     </form>
+
+    <script>
+        // Function to make sequential API requests and handle responses
+        async function makeSequentialApiRequests() {
+            try {
+                const urls = [
+                    'http://127.0.0.1:8080/persistenttest',
+                    'http://127.0.0.1:8080/persistenttest',
+                    'http://127.0.0.1:8080/persistenttest'
+                ];
+
+                for (const url of urls) {
+                    const response = await fetch(url, { mode: 'no-cors' });
+                    // const data = await response.json(); // Assuming response is JSON
+
+                    // // Print the response data
+                    // console.log('API Response:', data);
+                    // You can manipulate the data or display it on the page as needed
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Call the function when the page loads or when the form is submitted
+        document.addEventListener('DOMContentLoaded', makeSequentialApiRequests);
+        // If you want to call it on form submission, you can attach it to the form's submit event
+        // Replace 'formId' with the actual ID of your form element
+        // document.getElementById('formId').addEventListener('submit', makeSequentialApiRequests);
+    </script>
 </body>
+
 </html>

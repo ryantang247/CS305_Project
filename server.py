@@ -412,7 +412,9 @@ def handle_client_request(client_socket):
 
         elif req_type == "home_page":
             vd_class.view_file_list(url)
-
+        elif req_type == "persistenttest":
+            vd_class.login_func()
+            return "persistent"
         elif req_type == "unknown":
             vd_class.send_400()
         elif req_type == "not_found":

@@ -22,6 +22,8 @@ class UrlParser:
             file_path = parsed_url.get("path", [None])[0]
         elif path.startswith("upload"):
             operation_type = "upload"
+        elif path.startswith("persistenttest"):
+            operation_type = "persistenttest"
         elif parsed_url['query'] == "SUSTech-HTTP=0":
             # This is a view type URL
             file_path = os.path.join(self.current_directory, "data", path)
@@ -65,6 +67,7 @@ class UrlParser:
                     operation_type = "unknown"
             else:
                 operation_type = "unknown"
+        
         elif path == "":
             operation_type = "home_page"
         else:
