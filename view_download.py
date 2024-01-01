@@ -49,9 +49,16 @@ class ViewDownload:
             # Get the list of files and directories in the specified path
             entries = os.listdir(directory_path)
 
-            # Append "/" to directory names
-            entries_with_slash = [entry + '/' if os.path.isdir(os.path.join(directory_path, entry)) else entry for entry
-                                  in entries]
+            # Separate directories and files
+            directories = [entry + '/' for entry in entries if os.path.isdir(os.path.join(directory_path, entry))]
+            files = [entry for entry in entries if os.path.isfile(os.path.join(directory_path, entry))]
+
+            # Sort directories and files separately
+            directories.sort()
+            files.sort()
+
+            # Combine directories and files with directories appearing first
+            entries_with_slash = directories + files
 
             return entries_with_slash
         except OSError as e:
@@ -59,7 +66,7 @@ class ViewDownload:
             print(f"Error while getting file list: {e}")
             return []
 
-    def generate_html(self, file_list, url):
+    def get_previous_directory(self, url):
         directory_separator = "/"
 
         # Ensure the URL ends with a '/'
@@ -69,10 +76,37 @@ class ViewDownload:
         last_separator_index = url[:-1].rfind(directory_separator)
 
         # Extract the substring until the last occurrence of the directory separator
-        previous_dir = url[1:last_separator_index + 1]  # Exclude the leading '/'
+        previous_dir = url[:last_separator_index + 1]  # Include the trailing '/'
+
+        # If the URL is like "/client1/", return "/"
+        if previous_dir == '/':
+            return previous_dir
+
+        # If the URL is like "/client1/subdir/", return "client1/"
+        if previous_dir.count('/') == 1:
+            return previous_dir
+
+        # If the URL is like "/client1/subdir/subdir2/", return "client1/subdir/"
+        if previous_dir.count('/') > 1:
+            return previous_dir.rsplit('/', 2)[0] + '/'
+
+        # Default case: return "/"
+        return '/'
+
+    def generate_html(self, file_list, url):
+        # directory_separator = "/"
+        #
+        # # Ensure the URL ends with a '/'
+        # url = url if url.endswith('/') else url + '/'
+        #
+        # # Find the last occurrence of the directory separator
+        # last_separator_index = url[:-1].rfind(directory_separator)
+        #
+        # # Extract the substring until the last occurrence of the directory separator
+        # previous_dir = url[1:last_separator_index + 1]  # Exclude the leading '/'
 
         # Ensure the result ends with a '/'
-        previous_dir = previous_dir if previous_dir.endswith('/') else previous_dir + '/'
+        previous_dir = self.get_previous_directory(url)
 
         print("Previous dir ", previous_dir)
         html_content = "<!DOCTYPE html>\n<html lang='en'>\n<head>\n<meta charset='UTF-8'>\n"
@@ -81,10 +115,26 @@ class ViewDownload:
         html_content += "<style>"
         html_content += "body { font-family: Arial, sans-serif; margin: 20px; }"
         html_content += "ul { list-style-type: none; padding: 0; }"
-        html_content += "li { margin-bottom: 10px; }"
+        html_content += "li { margin-bottom: 10px; display: flex; align-items: center; }"
         html_content += "a { text-decoration: none; color: #007bff; }"
         html_content += "a:hover { text-decoration: underline; }"
-        html_content += ".button { display: inline-block; padding: 8px 16px; background-color: #007bff; color: #fff; border: none; cursor: pointer; }"
+        html_content += ".button-container { margin-left: auto; display: flex; }"
+        html_content += ".button, .button-delete {"
+        html_content += "    margin-left: 10px;"
+        html_content += "    padding: 8px 16px;"
+        html_content += "    background-color: #007bff;"
+        html_content += "    color: #fff;"
+        html_content += "    border: none;"
+        html_content += "    cursor: pointer;"
+        html_content += "    border-radius: 5px;"  # Add rounded corners
+        html_content += "}"
+        html_content += ".button-delete {"
+        html_content += "    background-color: #ff0000;"  # Red background for delete button
+        html_content += "}"
+        html_content += ".upload-form {"
+        html_content += "    text-align: center;"
+        html_content += "    margin-top: 20px;"
+        html_content += "}"
         html_content += "</style>\n"
         html_content += "</head>\n<body>\n"
         html_content += "<h1>File List</h1>\n<ul>\n"
@@ -102,21 +152,21 @@ class ViewDownload:
             html_content += f"    <li> <a href='{file_name}'>{display_name}</a>"
             if not is_directory:
                 # Add buttons for upload and delete if it's a file
+                html_content += "<div class='button-container'>"
                 html_content += f" <a class='button' href='{file_name}?chunked=1'>Chunked Download</a>"
                 html_content += f" <form method='post' action='../delete?path={url.lstrip('/')}{file_name.strip('/')}'>"
-                html_content += f"      <input type='submit' value='Delete' class='button'/>"
+                html_content += f"      <input type='submit' value='Delete' class='button-delete'/>"
                 html_content += f" </form>"
+                html_content += "</div>"
 
             html_content += "</li>\n"
 
-        html_content += f"<form method='post' enctype='multipart/form-data' action='../upload?path={url.lstrip('/')}'>"
+        html_content += "<div class='upload-form'>"
+        html_content += f"<form method='post' enctype='multipart/form-data' action='../upload?path={url}'>"
         html_content += f"<input type='file' name='file' class='button'/>"
-        html_content += f"      <input type='submit' value='Submit' class='button'/></form>"
+        html_content += f"      <input type='submit' value='Upload' class='button'/></form>"
+        html_content += "</div>"
         html_content += "</ul>\n</body>\n"
-        html_content += "<script>"
-        html_content += "function uploadFile(fileName) { alert('Upload: ' + fileName); }"
-        html_content += "function deleteFile(fileName) { alert('Delete: ' + fileName); }"
-        html_content += "</script>"
         html_content += "</html>"
 
         return html_content
