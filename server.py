@@ -14,7 +14,7 @@ import time
 import argparse
 from PIL import Image
 from io import BytesIO
-
+active_connections = 0
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Server configuration')
     parser.add_argument('-i', '--ip', type=str, default='127.0.0.1', help='Server IP address')
@@ -283,6 +283,14 @@ def process_request_data(client_socket):
 
 
 def handle_client_request(client_socket):
+    global active_connections
+    if active_connections > 5:
+        error_response = "HTTP/1.1 503 Service Unavailable\r\n\r\nServer Overloaded"
+        client_socket.sendall(error_response.encode('utf-8'))
+        return
+
+        # Increment active connections count when a new connection is received
+        
     # Receive data from the client
     # incr = 1;
     # while True:
@@ -385,6 +393,13 @@ def handle_client_request(client_socket):
         req_type = url_parser.process_url()
         formatted_url = url.lstrip('/').replace('/', os.path.sep)
         vd_class = ViewDownload(client_socket, current_directory, session_id)
+        upstream_server_error_condition = True  # Simulating an error condition
+
+        if url == "/compnet":
+            # Return a 502 Bad Gateway response
+            error_response = "HTTP/1.1 502 Bad Gateway\r\n\r\nUpstream Server Error"
+            client_socket.sendall(error_response.encode('utf-8'))
+            return
         if req_type == 'download':
             # Send the HTML content as the response
 
@@ -588,6 +603,8 @@ def handle_client_request(client_socket):
             error_response = f"HTTP/1.1 500 Internal Server Error\r\n\r\n{error_message}"
             # print("****** Error: " + str(e) + "\n")
             client_socket.sendall(error_response.encode('utf-8'))
+            # Decrement active connections count when the request handling is done
+          
 
     else:
         # Return 405 Method Not Allowed for other methods
@@ -599,7 +616,7 @@ def handle_client_request(client_socket):
         #     connection_header = headers['Connection'].lower()
         #     if connection_header == 'close':
         #         print("close")
-
+    
     if detectedClose:
         return "Bye"
 
@@ -749,6 +766,8 @@ print("The server is ready to receive")
 
 
 def client_thread(conn, addr):
+    global active_connections
+    active_connections += 1
     with conn:
         print(f"[CONNECTION] Connected to {addr}")
         while True:
@@ -756,7 +775,7 @@ def client_thread(conn, addr):
             data = handle_client_request(conn)
             if data == "Bye" or data == None:
                 break
-
+    active_connections -= 1
     print(f"[CONNECTION] Disconnected from {addr}")
 
 
